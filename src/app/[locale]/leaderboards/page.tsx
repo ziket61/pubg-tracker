@@ -12,7 +12,7 @@ import { getLeaderboard, getSeasons } from "@/lib/pubg/client";
 import { sortSeasonsDesc } from "@/lib/pubg/seasons";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { LeaderboardFilters } from "@/components/leaderboards/LeaderboardFilters";
-import { LeaderboardTable } from "@/components/leaderboards/LeaderboardTable";
+import { LeaderboardSortable } from "@/components/leaderboards/LeaderboardSortable";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default async function LeaderboardsPage({
@@ -91,7 +91,7 @@ async function LeaderboardWithFallback({
     if (!lb.entries.length) {
       return <EmptyState title="—" />;
     }
-    return <LeaderboardTable locale={locale} leaderboard={lb} />;
+    return <LeaderboardSortable locale={locale} leaderboard={lb} />;
   } catch {
     return <EmptyState title="—" />;
   }

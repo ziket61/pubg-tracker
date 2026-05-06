@@ -1,6 +1,6 @@
-// Renders the map background — a tactical grid + axis labels. Real map images are
-// not bundled (would balloon the bundle); the grid + colored hot points work well
-// for showing player positions and kill markers. Children are rendered above.
+// Renders the map: real PUBG map image (from pubg/api-assets via CDN) when
+// available, else a tactical grid fallback. The grid + axis labels stay on
+// top of the image so coordinates are still legible.
 import type { MapMeta } from "@/lib/pubg/maps";
 
 export function MapCanvas({
@@ -17,31 +17,49 @@ export function MapCanvas({
       className="relative isolate overflow-hidden rounded-2xl border border-border-strong"
       style={{ width: "100%", aspectRatio: "1 / 1" }}
     >
+      {/* Real map image (when known) */}
+      {map.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={map.imageUrl}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover opacity-90"
+          draggable={false}
+        />
+      )}
+
       <svg
         viewBox={`0 0 ${size} ${size}`}
-        className="absolute inset-0 h-full w-full bg-bg-muted"
+        className={`absolute inset-0 h-full w-full ${map.imageUrl ? "" : "bg-bg-muted"}`}
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
           <pattern id="rep-grid-fine" width={size / 32} height={size / 32} patternUnits="userSpaceOnUse">
-            <path d={`M ${size / 32} 0 L 0 0 0 ${size / 32}`} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+            <path d={`M ${size / 32} 0 L 0 0 0 ${size / 32}`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
           </pattern>
           <pattern id="rep-grid-major" width={size / 8} height={size / 8} patternUnits="userSpaceOnUse">
-            <path d={`M ${size / 8} 0 L 0 0 0 ${size / 8}`} fill="none" stroke="rgba(243,165,54,0.12)" strokeWidth="1" />
+            <path d={`M ${size / 8} 0 L 0 0 0 ${size / 8}`} fill="none" stroke="rgba(243,165,54,0.18)" strokeWidth="1" />
           </pattern>
-          <radialGradient id="rep-glow" cx="50%" cy="50%" r="60%">
+          <radialGradient id="rep-vignette" cx="50%" cy="50%" r="65%">
             <stop offset="0%" stopColor="rgba(8,9,12,0)" />
-            <stop offset="100%" stopColor="rgba(8,9,12,0.6)" />
+            <stop offset="100%" stopColor="rgba(8,9,12,0.55)" />
           </radialGradient>
         </defs>
 
-        <rect width={size} height={size} fill="#0c0e16" />
+        {/* When no map image is available, fill with the dark grid background. */}
+        {!map.imageUrl && (
+          <>
+            <rect width={size} height={size} fill="#0c0e16" />
+          </>
+        )}
         <rect width={size} height={size} fill="url(#rep-grid-fine)" />
         <rect width={size} height={size} fill="url(#rep-grid-major)" />
-        <rect width={size} height={size} fill="url(#rep-glow)" />
+        <rect width={size} height={size} fill="url(#rep-vignette)" />
 
         {/* axis labels */}
-        <g fontFamily="var(--font-mono)" fontSize="9" fill="rgba(243,165,54,0.4)" textAnchor="middle">
+        <g fontFamily="var(--font-mono)" fontSize="9" fill="rgba(243,165,54,0.55)" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.7)", strokeWidth: 3 } as React.CSSProperties}>
           {Array.from({ length: 8 }).map((_, i) => {
             const km = ((i + 1) * map.sizeKm) / 8;
             const x = ((i + 1) * size) / 8;

@@ -4,6 +4,7 @@ import type { Locale } from "@/lib/i18n/routing";
 import { Logo } from "@/components/icons/Logo";
 import { Badge } from "@/components/ui/Badge";
 import { LocaleSwitcher } from "./LocaleSwitcher";
+import { MobileNav } from "./MobileNav";
 import { useMocks } from "@/lib/env";
 
 export async function Header({ locale }: { locale: Locale }) {
@@ -38,6 +39,7 @@ export async function Header({ locale }: { locale: Locale }) {
             </Badge>
           )}
           <LocaleSwitcher current={locale} />
+          <MobileNav />
         </div>
       </div>
     </header>
