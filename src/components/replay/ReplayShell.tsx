@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import type {
+  CarePackageEvent,
   DamageEvent,
   KillEvent,
   ParachuteLandingEvent,
   PlayerRef,
   TelemetryScene,
+  VehicleEvent,
 } from "@/lib/pubg/telemetry/types";
 import { snapshotAt, trailFor, zoneAt } from "@/lib/pubg/telemetry/timeline";
 import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
@@ -15,6 +17,7 @@ import { killHeat, landingHeat, type HeatBucket } from "@/lib/pubg/telemetry/hea
 import type { MapMeta } from "@/lib/pubg/maps";
 import type { Shard } from "@/lib/pubg/shards";
 import { getItemName } from "@/lib/assets/names";
+import { getItemIcon } from "@/lib/assets/icons";
 import { PlayerLink } from "@/components/common/PlayerLink";
 import { MapCanvas } from "./MapCanvas";
 import Link from "next/link";
@@ -51,6 +54,7 @@ export interface SerializableScene {
   zones: TelemetryScene["zones"];
   carePackages: TelemetryScene["carePackages"];
   parachuteLandings?: ParachuteLandingEvent[];
+  vehicleSpawns?: VehicleEvent[];
   /**
    * Subset of damage events with attacker + victim locations attached, for
    * the tracer animation. Filtered to damage >= 5 to skip noise.
@@ -103,6 +107,7 @@ export function ReplayShell({
       damages: serialized.damageHits,
       carePackages: serialized.carePackages,
       parachuteLandings: serialized.parachuteLandings ?? [],
+      vehicleSpawns: serialized.vehicleSpawns ?? [],
       zones: serialized.zones,
       players: new Map(serialized.playerEntries),
     }),
@@ -120,8 +125,10 @@ export function ReplayShell({
   const [showTracers, setShowTracers] = useState(true);
   const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // Continuous zoom (1.0 .. 5.0), driven by buttons / slider / scroll wheel.
+  // Continuous zoom (1.0 .. 5.0) and pan offset (px, applied as translate).
+  // Pan is reset whenever zoom drops back to 1×.
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [fullscreen, setFullscreen] = useState(false);
 
   // Track when each player died so the sidebar can grey their row out.
@@ -190,10 +197,15 @@ export function ReplayShell({
   }, [scene.kills, time, showKills]);
 
   // Care packages that have already dropped at the current playback time.
-  const visibleDrops = useMemo(() => {
+  const visibleDrops = useMemo<CarePackageEvent[]>(() => {
     if (!showDrops) return [];
     return scene.carePackages.filter((c) => c.time <= time + 0.001);
   }, [scene.carePackages, time, showDrops]);
+
+  // Vehicle spawns that have appeared by now (BRDMs etc).
+  const visibleVehicles = useMemo<VehicleEvent[]>(() => {
+    return (scene.vehicleSpawns ?? []).filter((v) => v.time <= time + 0.001);
+  }, [scene.vehicleSpawns, time]);
 
   // Focus player's own events for the scrubber timeline markers — now with
   // full event payload so we can show rich tooltips on hover.
@@ -230,9 +242,10 @@ export function ReplayShell({
     );
   }, [scene.damages, time, showTracers, compact]);
 
-  // Killfeed: last 6 kills that have happened at or before the current time.
+  // Killfeed: last 5 kills that have happened at or before the current time.
+  // Capped tighter than before (was 6) to keep the on-map overlay slim.
   const killfeed = useMemo(() => {
-    return scene.kills.filter((k) => k.time <= time + 0.001).slice(-6).reverse();
+    return scene.kills.filter((k) => k.time <= time + 0.001).slice(-5).reverse();
   }, [scene.kills, time]);
 
   // Killfeed history — full list of every kill that's happened up to current time.
@@ -270,10 +283,52 @@ export function ReplayShell({
       })
     : null;
 
-  // Scroll-wheel zoom on the map area (pubg.sh-style).
+  // Reset pan when zoom drops back to 1× (no panning at base zoom).
+  useEffect(() => {
+    if (zoom <= 1) {
+      setPan({ x: 0, y: 0 });
+    }
+  }, [zoom]);
+
+  // Mouse-drag panning while zoomed in. The drag is tracked in CSS pixels
+  // and applied as a `translate(...)` before the scale transform.
   const mapWrapRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only pan when zoomed in. When zoom = 1, native click bubble keeps
+      // working (player markers, etc).
+      if (zoom <= 1) return;
+      if (e.button !== 0) return;
+      dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+      setIsDragging(true);
+    },
+    [zoom, pan],
+  );
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      setPan({ x: d.panX + (e.clientX - d.x), y: d.panY + (e.clientY - d.y) });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      setIsDragging(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isDragging]);
+
+  // Scroll-wheel zoom on the map area (pubg.sh-style).
   const onWheel = useCallback((e: WheelEvent) => {
-    // Only zoom when the cursor is over the map and the user actually scrolls.
     if (e.ctrlKey || e.metaKey) return; // leave browser zoom alone
     e.preventDefault();
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
@@ -299,6 +354,8 @@ export function ReplayShell({
               opacity={Math.max(0.08, b.count * 0.5)}
             />
           ))}
+          {/* Safe zone (next play area outline) — drawn WHITE per spec.
+              This is the white circle players see in-game. */}
           {zone?.safetyZonePosition && zone.safetyZoneRadius && (
             <ZoneCircle
               cx={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
@@ -307,12 +364,24 @@ export function ReplayShell({
               tone="safe"
             />
           )}
+          {/* Blue zone warning — drawn BLUE per spec. The poisonGasWarning
+              in telemetry IS the next-shrinking blue zone perimeter. */}
           {zone?.poisonGasWarningPosition && zone.poisonGasWarningRadius && (
             <ZoneCircle
               cx={gameToCanvas(zone.poisonGasWarningPosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
               cy={gameToCanvas(zone.poisonGasWarningPosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).y}
               r={radiusToCanvas(zone.poisonGasWarningRadius, map, { width: CANVAS_SIZE, height: CANVAS_SIZE })}
-              tone="warn"
+              tone="blue"
+            />
+          )}
+          {/* Red zone (bombardment area) — dashed red ring, only visible
+              while active. Now extracted from telemetry. */}
+          {zone?.redZonePosition && zone.redZoneRadius && (
+            <ZoneCircle
+              cx={gameToCanvas(zone.redZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
+              cy={gameToCanvas(zone.redZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).y}
+              r={radiusToCanvas(zone.redZoneRadius, map, { width: CANVAS_SIZE, height: CANVAS_SIZE })}
+              tone="red"
             />
           )}
 
@@ -337,29 +406,100 @@ export function ReplayShell({
               );
             })}
 
-          {/* Drops (care packages) — pubg.sh-style: simple square crate tilted
-              45° (a "diamond"), with a bright outline ring while fresh. */}
+          {/* BRDM markers — flare-called armored vehicles. Rendered as a
+              small blocky vehicle silhouette with a subtle blue tint so it
+              reads differently from drops/kills. */}
+          {visibleVehicles.map((v) => {
+            const p = gameToCanvas(v.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
+            return (
+              <g key={`veh-${v.vehicleId}`} transform={`translate(${p.x} ${p.y})`}>
+                <circle r="9" fill="rgba(8,9,12,0.7)" stroke="#38bdf8" strokeWidth="1.4" />
+                <text
+                  fontFamily="var(--font-mono)"
+                  fontSize="6"
+                  fill="#38bdf8"
+                  textAnchor="middle"
+                  y="2"
+                  style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.9)", strokeWidth: 2 } as React.CSSProperties}
+                >
+                  BRDM
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Drops (care packages) — restored parachute+crate icon (per user
+              feedback). Regular drops are small. "Special" drops (flare-
+              called, marked by special items in their package) get a larger
+              crate with a red flare ring. */}
           {visibleDrops.map((d, idx) => {
             const p = gameToCanvas(d.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
             const fresh = time - d.time < 6;
+            const special = d.kind === "special";
             return (
               <g key={`drop-${idx}`} transform={`translate(${p.x} ${p.y})`}>
                 {fresh && (
-                  <circle r="11" fill="none" stroke="#fbbf24" strokeWidth="1.5" opacity="0.85">
-                    <animate attributeName="r" from="6" to="22" dur="1.4s" repeatCount="indefinite" />
+                  <circle
+                    r="11"
+                    fill="none"
+                    stroke={special ? "#ef4444" : "#fbbf24"}
+                    strokeWidth="1.6"
+                    opacity="0.85"
+                  >
+                    <animate attributeName="r" from="6" to={special ? "30" : "22"} dur="1.4s" repeatCount="indefinite" />
                     <animate attributeName="opacity" from="0.85" to="0" dur="1.4s" repeatCount="indefinite" />
                   </circle>
                 )}
-                {/* dark backing for legibility against the map */}
-                <rect
-                  x="-5.4" y="-5.4" width="10.8" height="10.8"
-                  fill="rgba(8,9,12,0.85)"
-                  stroke="#fbbf24"
-                  strokeWidth="1.6"
-                  transform="rotate(45)"
+                {/* parachute canopy */}
+                <path
+                  d={
+                    special
+                      ? `M -10 -4 A 10 7 0 0 1 10 -4 L 7 -2 A 7 5 0 0 0 -7 -2 Z`
+                      : `M -7 -3 A 7 5 0 0 1 7 -3 L 5 -1 A 5 3.5 0 0 0 -5 -1 Z`
+                  }
+                  fill={special ? "#ef4444" : "#fbbf24"}
+                  stroke="rgba(8,9,12,0.9)"
+                  strokeWidth="0.8"
                 />
-                {/* inner dot — gold parachute crate marker */}
-                <rect x="-2" y="-2" width="4" height="4" fill="#fbbf24" transform="rotate(45)" />
+                {/* lines */}
+                <line
+                  x1={special ? -7 : -5}
+                  y1={special ? -2 : -1}
+                  x2={special ? -2 : -1.5}
+                  y2={special ? 3 : 2}
+                  stroke="rgba(8,9,12,0.9)"
+                  strokeWidth="0.8"
+                />
+                <line
+                  x1={special ? 7 : 5}
+                  y1={special ? -2 : -1}
+                  x2={special ? 2 : 1.5}
+                  y2={special ? 3 : 2}
+                  stroke="rgba(8,9,12,0.9)"
+                  strokeWidth="0.8"
+                />
+                {/* crate */}
+                <rect
+                  x={special ? -4 : -2.5}
+                  y={special ? 3 : 2}
+                  width={special ? 8 : 5}
+                  height={special ? 6 : 4}
+                  fill={special ? "#92611f" : "#92611f"}
+                  stroke={special ? "#fbbf24" : "rgba(8,9,12,0.9)"}
+                  strokeWidth={special ? 1 : 0.8}
+                />
+                {special && (
+                  <text
+                    fontFamily="var(--font-mono)"
+                    fontSize="4"
+                    fill="#fbbf24"
+                    textAnchor="middle"
+                    y="7.5"
+                    style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.95)", strokeWidth: 1.2 } as React.CSSProperties}
+                  >
+                    !
+                  </text>
+                )}
               </g>
             );
           })}
@@ -481,86 +621,88 @@ export function ReplayShell({
     );
   }
 
-  // Zoom origin: focus player when zoomed; else center.
-  const zoomOriginX = focusCanvas && zoom > 1 ? `${(focusCanvas.x / CANVAS_SIZE) * 100}%` : "50%";
-  const zoomOriginY = focusCanvas && zoom > 1 ? `${(focusCanvas.y / CANVAS_SIZE) * 100}%` : "50%";
+  // Zoom origin: focus player when zoomed (and no manual pan); else center.
+  // When the user has manually dragged, we keep the origin centered and rely
+  // on the translate offset to position the view.
+  const userPanned = pan.x !== 0 || pan.y !== 0;
+  const zoomOriginX =
+    !userPanned && focusCanvas && zoom > 1
+      ? `${(focusCanvas.x / CANVAS_SIZE) * 100}%`
+      : "50%";
+  const zoomOriginY =
+    !userPanned && focusCanvas && zoom > 1
+      ? `${(focusCanvas.y / CANVAS_SIZE) * 100}%`
+      : "50%";
 
-  // Map block + side overlays (zoom + fullscreen + killfeed). Wrapped so we
-  // can drop it into either the inline layout or the fullscreen layout.
+  // Map block + side overlays (fullscreen toggle + killfeed).
   const mapWithOverlays = (
     <div ref={mapWrapRef} className="relative h-full w-full">
-      {/* Zoom container — outer box stays fixed-size, inner is scaled */}
-      <div className="overflow-hidden rounded-2xl">
+      {/* Zoom container — outer box stays fixed-size, inner is scaled + translated for pan. */}
+      <div
+        className="overflow-hidden rounded-2xl"
+        style={{ cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default" }}
+        onMouseDown={onMouseDown}
+      >
         <div
           className="transition-transform duration-150 ease-out"
           style={{
-            transform: `scale(${zoom})`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: `${zoomOriginX} ${zoomOriginY}`,
+            // Disable transition during active drag so the map tracks the cursor 1:1.
+            transitionDuration: isDragging ? "0ms" : undefined,
           }}
         >
           {mapInner}
         </div>
       </div>
 
-      {/* Killfeed — overlay on top-right of the map */}
+      {/* Compact killfeed — slimmer than before, sized to ~210px width with
+          weapon icons instead of text labels (per #11/#12 feedback). */}
       {killfeed.length > 0 && (
-        <div className="pointer-events-none absolute right-3 top-12 w-[260px] space-y-1">
+        <div className="pointer-events-none absolute right-3 top-12 w-[210px] space-y-0.5">
           {killfeed.map((k, i) => {
             const age = time - k.time;
             const fresh = age < 5;
-            const opacity = age < 30 ? Math.max(0.45, 1 - age / 30) : 0.35;
+            const opacity = age < 30 ? Math.max(0.5, 1 - age / 30) : 0.4;
             return (
               <div
                 key={`kf-${i}-${k.time}`}
-                className={`rounded-md border border-border bg-bg/85 px-2 py-1 font-mono text-[11px] backdrop-blur-sm ${
-                  fresh ? "border-combat/50 shadow-[0_0_12px_-2px_rgba(239,68,68,0.4)]" : ""
+                className={`flex items-center gap-1 rounded border border-border/70 bg-bg/85 px-1.5 py-0.5 font-mono text-[10px] backdrop-blur-sm ${
+                  fresh ? "border-combat/60" : ""
                 }`}
                 style={{ opacity }}
               >
-                <span className="text-fg-muted">{k.killer?.name ?? "—"}</span>
-                <span className="mx-1.5 text-combat">→</span>
-                <span className="text-fg">{k.victim.name}</span>
-                <span className="ml-2 text-[9px] text-fg-subtle">
-                  {getItemName(k.damageCauserName)}
-                </span>
+                <span className="truncate text-fg-muted">{k.killer?.name ?? "—"}</span>
+                <WeaponBadge id={k.damageCauserName} />
                 {k.isHeadshot && (
-                  <span className="ml-1 rounded bg-combat/20 px-1 text-[9px] uppercase text-combat">
+                  <span className="rounded bg-combat/20 px-1 text-[8px] font-bold uppercase text-combat">
                     HS
                   </span>
                 )}
+                <span className="truncate text-fg">{k.victim.name}</span>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Floating fullscreen toggle (top-left) */}
+      {/* Floating fullscreen toggle (top-left) — single small button only. */}
       <div className="absolute left-3 top-12">
         <button
           type="button"
           onClick={() => setFullscreen((f) => !f)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-strong bg-bg/80 text-fg-muted backdrop-blur-sm transition-colors hover:text-fg"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-strong bg-bg/80 text-fg-muted backdrop-blur-sm transition-colors hover:text-fg"
           aria-label={fullscreen ? t("exitFullscreen") : t("enterFullscreen")}
           title={fullscreen ? t("exitFullscreen") : t("enterFullscreen")}
         >
           {fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}
         </button>
       </div>
-
-      {/* Floating zoom rail — pubg.sh-inspired: + / slider / − / reset.
-          Lives on the right edge, vertically centered. */}
-      <ZoomRail
-        zoom={zoom}
-        onZoom={(z) => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +z.toFixed(2))))}
-        t={t}
-      />
     </div>
   );
 
   // Fullscreen layout: the map gets a square box sized to fit BOTH the
   // viewport width and the remaining height (after controls / legend).
-  // We use min(100vw, 100vh - 220px) so the square never crops sides or
-  // top/bottom — the user explicitly asked for "fit, do not crop".
   if (fullscreen) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto bg-bg p-3 md:p-5">
@@ -600,6 +742,8 @@ export function ReplayShell({
           heatMode={heatMode}
           onHeatMode={setHeatMode}
           markers={focusMarkers}
+          zoom={zoom}
+          onZoom={(z) => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +z.toFixed(2))))}
           t={t}
         />
         <Legend t={t} />
@@ -638,9 +782,10 @@ export function ReplayShell({
           heatMode={heatMode}
           onHeatMode={setHeatMode}
           markers={focusMarkers}
+          zoom={zoom}
+          onZoom={(z) => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +z.toFixed(2))))}
           t={t}
         />
-        {/* Legend lives at the bottom (under the map + controls), full-width. */}
         <Legend t={t} />
       </div>
 
@@ -692,6 +837,8 @@ function ControlsBar({
   heatMode,
   onHeatMode,
   markers,
+  zoom,
+  onZoom,
   t,
 }: {
   playing: boolean;
@@ -715,8 +862,15 @@ function ControlsBar({
   heatMode: "off" | "kills" | "landings";
   onHeatMode: (m: "off" | "kills" | "landings") => void;
   markers: ScrubberMarker[];
+  zoom: number;
+  onZoom: (z: number) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
+  // Speed presets — the slider snaps to these "stops" so users always land
+  // on a sensible value but still get the slider feel.
+  const SPEEDS = [1, 2, 4, 8];
+  const speedIndex = Math.max(0, SPEEDS.indexOf(speed));
+
   return (
     <div className="mt-3 rounded-xl border border-border bg-surface p-3">
       <div className="flex items-center gap-2">
@@ -736,7 +890,54 @@ function ControlsBar({
         >
           <RestartIcon />
         </button>
-        <SpeedSelector value={speed} onChange={onSpeed} />
+
+        {/* Speed slider — replaces the pill (#6 feedback). 1× → 8× snapping
+            on integer indices, with the live value visible to the right. */}
+        <label className="flex items-center gap-2">
+          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
+            {t("speedLabel")}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={SPEEDS.length - 1}
+            step={1}
+            value={speedIndex}
+            onChange={(e) => onSpeed(SPEEDS[Number(e.target.value)] ?? 1)}
+            className="h-1.5 w-24 cursor-pointer accent-brand"
+            aria-label={t("speedLabel")}
+          />
+          <span className="w-7 text-right font-mono text-[11px] tabular-nums text-fg-muted">
+            {speed}×
+          </span>
+        </label>
+
+        {/* Zoom slider — moved out of the map (#5). Lives in the controls bar
+            next to the speed slider so it doesn't eat visible map area. */}
+        <label className="flex items-center gap-2">
+          <span className="font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
+            {t("zoomLabel")}
+          </span>
+          <input
+            type="range"
+            min={ZOOM_MIN}
+            max={ZOOM_MAX}
+            step={ZOOM_STEP}
+            value={zoom}
+            onChange={(e) => onZoom(Number(e.target.value))}
+            className="h-1.5 w-24 cursor-pointer accent-brand"
+            aria-label={t("zoomLabel")}
+          />
+          <button
+            type="button"
+            onClick={() => onZoom(1)}
+            className="w-9 text-left font-mono text-[11px] tabular-nums text-fg-muted transition-colors hover:text-fg"
+            title={t("zoomReset")}
+          >
+            {zoom.toFixed(1)}×
+          </button>
+        </label>
+
         <span className="ml-auto font-mono text-xs tabular-nums text-fg-muted">
           {fmtTime(time)} / {fmtTime(duration)}
         </span>
@@ -777,30 +978,6 @@ function ControlsBar({
           ))}
         </span>
       </div>
-    </div>
-  );
-}
-
-function SpeedSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  // pubg.sh uses a small "speed pill" with 1×/2×/4×/8× steps. We keep that
-  // pattern but make the active step clearly highlighted with a sliding bg.
-  const steps = [1, 2, 4, 8];
-  return (
-    <div className="flex h-9 items-center gap-0.5 rounded-md border border-border bg-bg-muted p-0.5">
-      {steps.map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onChange(s)}
-          className={`flex h-7 min-w-[34px] items-center justify-center rounded px-2 font-mono text-[11px] font-semibold uppercase transition-all ${
-            value === s
-              ? "bg-brand text-bg shadow-sm"
-              : "text-fg-muted hover:bg-bg/60 hover:text-fg"
-          }`}
-        >
-          {s}×
-        </button>
-      ))}
     </div>
   );
 }
@@ -874,6 +1051,7 @@ function MarkerTooltip({
   const time = fmtTime(marker.time);
   let label: string;
   let detail: string;
+  let weaponId: string | null = null;
   if (marker.kind === "kill") {
     label = t("eventKill");
     detail = t("eventKillTip", {
@@ -882,6 +1060,7 @@ function MarkerTooltip({
       victim: marker.data.victim.name,
       weapon: getItemName(marker.data.damageCauserName),
     });
+    weaponId = marker.data.damageCauserName;
   } else if (marker.kind === "death") {
     label = t("eventDeath");
     detail = t("eventDeathTip", {
@@ -890,6 +1069,7 @@ function MarkerTooltip({
       victim: marker.data.victim.name,
       weapon: getItemName(marker.data.damageCauserName),
     });
+    weaponId = marker.data.damageCauserName;
   } else {
     label = t("eventDamage");
     detail = t("eventDamageTip", {
@@ -898,71 +1078,56 @@ function MarkerTooltip({
       damage: Math.round(marker.data.damage),
       weapon: getItemName(marker.data.damageCauserName),
     });
+    weaponId = marker.data.damageCauserName;
   }
   return (
     <div className="pointer-events-none absolute -top-1 left-1/2 z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border bg-bg/95 px-2 py-1 font-mono text-[10px] text-fg shadow-lg backdrop-blur-sm">
-      <div className="text-[9px] uppercase tracking-wider text-fg-subtle">{label}</div>
+      <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-fg-subtle">
+        {weaponId && <WeaponIconInline id={weaponId} />}
+        {label}
+      </div>
       <div className="text-[10px] normal-case tracking-normal text-fg-muted">{detail}</div>
     </div>
   );
 }
 
 /**
- * Vertical zoom rail à la pubg.sh — `+` on top, slider in the middle, `−`
- * on the bottom, plus a small reset link. Sits on the right edge of the
- * map; players can also scroll the wheel anywhere on the map to zoom.
+ * Inline weapon badge — small icon + tiny shorthand. Falls back to a text
+ * label when we don't have an icon mapping. Used in the on-map killfeed
+ * (per user feedback #12 to switch from text to icons à la pubg.sh).
  */
-function ZoomRail({
-  zoom,
-  onZoom,
-  t,
-}: {
-  zoom: number;
-  onZoom: (z: number) => void;
-  t: ReturnType<typeof useTranslations>;
-}) {
-  return (
-    <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-md border border-border-strong bg-bg/80 p-1 backdrop-blur-sm">
-      <button
-        type="button"
-        onClick={() => onZoom(Math.min(ZOOM_MAX, zoom + ZOOM_STEP))}
-        className="inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-muted hover:text-fg"
-        aria-label={t("zoomIn")}
-        title={t("zoomIn")}
-      >
-        <PlusIcon />
-      </button>
-      <input
-        type="range"
-        min={ZOOM_MIN}
-        max={ZOOM_MAX}
-        step={ZOOM_STEP}
-        value={zoom}
-        onChange={(e) => onZoom(Number(e.target.value))}
-        // CSS trick: rotate a horizontal range input so it looks vertical.
-        // We use a fixed length and orient via writing-mode where possible.
-        className="h-24 w-1 cursor-pointer accent-brand"
-        style={{ writingMode: "vertical-lr" as React.CSSProperties["writingMode"], direction: "rtl" }}
-        aria-label={t("zoomLabel")}
+function WeaponBadge({ id }: { id: string }) {
+  const src = id ? getItemIcon(id) : null;
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={getItemName(id)}
+        title={getItemName(id)}
+        width={20}
+        height={14}
+        className="h-3.5 w-5 rounded-sm bg-bg-subtle/40 object-contain"
+        loading="lazy"
       />
-      <button
-        type="button"
-        onClick={() => onZoom(Math.max(ZOOM_MIN, zoom - ZOOM_STEP))}
-        className="inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-muted hover:text-fg"
-        aria-label={t("zoomOut")}
-        title={t("zoomOut")}
-      >
-        <MinusIcon />
-      </button>
-      <button
-        type="button"
-        onClick={() => onZoom(1)}
-        className="font-mono text-[9px] uppercase tracking-wide text-fg-subtle transition-colors hover:text-fg"
-        title={t("zoomReset")}
-      >
-        {zoom.toFixed(1)}×
-      </button>
-    </div>
+    );
+  }
+  return <span className="rounded bg-bg-subtle/60 px-1 text-[9px] text-fg-subtle">{getItemName(id)}</span>;
+}
+
+function WeaponIconInline({ id }: { id: string }) {
+  const src = id ? getItemIcon(id) : null;
+  if (!src) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      width={18}
+      height={12}
+      className="h-3 w-4 rounded-sm bg-bg-subtle/40 object-contain"
+      loading="lazy"
+    />
   );
 }
 
@@ -984,13 +1149,22 @@ function Legend({ t }: { t: ReturnType<typeof useTranslations> }) {
           <KillX /> {t("legendKill")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <DropDiamond /> {t("legendDrop")}
+          <DropParachute /> {t("legendDrop")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full border border-accent" /> {t("legendSafeZone")}
+          <DropParachute special /> {t("legendDropSpecial")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full border border-combat" /> {t("legendBlueZone")}
+          <BrdmDot /> {t("legendVehicle")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-white/80" /> {t("legendSafeZone")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-accent" /> {t("legendBlueZone")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-combat border-dashed" /> {t("legendRedZone")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-0.5 w-3 bg-[#fb923c]" /> {t("legendTracer")}
@@ -1120,10 +1294,9 @@ function KillfeedHistory({
           >
             <span className="tabular-nums text-fg-subtle">{fmtTime(k.time)}</span>
             <PlayerLink name={k.killer?.name} shard={shard} className="text-fg-muted" />
-            <span className="text-combat">→</span>
+            <WeaponBadge id={k.damageCauserName} />
             <PlayerLink name={k.victim.name} shard={shard} className="text-fg" />
             {k.isHeadshot && <span className="rounded bg-combat/20 px-1 text-[9px] uppercase text-combat">HS</span>}
-            <span className="ml-auto truncate text-fg-subtle">{getItemName(k.damageCauserName)}</span>
           </li>
         ))}
       </ol>
@@ -1131,12 +1304,27 @@ function KillfeedHistory({
   );
 }
 
-function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "safe" | "warn" }) {
-  const stroke = tone === "safe" ? "#38bdf8" : "#ef4444";
+function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "safe" | "blue" | "red" }) {
+  // safe = next play area outline (white, what players see in-game).
+  // blue = the shrinking blue zone perimeter (poisonGasWarning).
+  // red  = the bombardment zone — dashed so it reads as a temporary hazard.
+  const stroke =
+    tone === "safe" ? "#ffffff" : tone === "blue" ? "#38bdf8" : "#ef4444";
+  const fill =
+    tone === "safe" ? 0.06 : tone === "blue" ? 0.07 : 0.08;
   return (
     <g>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke} strokeWidth="1.5" opacity="0.8" />
-      <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={tone === "safe" ? 0.05 : 0.04} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={tone === "safe" ? 1.4 : 1.5}
+        strokeDasharray={tone === "red" ? "4 3" : undefined}
+        opacity={tone === "safe" ? 0.95 : 0.85}
+      />
+      <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={fill} />
     </g>
   );
 }
@@ -1190,13 +1378,29 @@ function KillX() {
   );
 }
 
-function DropDiamond() {
-  // Mirror the in-map drop glyph (small gold diamond) so the legend
-  // visually matches what the user sees on the map.
+function DropParachute({ special = false }: { special?: boolean }) {
+  // Mirror the in-map drop glyph (parachute + crate) in the legend so the
+  // user sees what each variant looks like.
   return (
-    <svg width="10" height="10" viewBox="-6 -6 12 12" aria-hidden>
-      <rect x="-4" y="-4" width="8" height="8" fill="rgba(8,9,12,0.85)" stroke="#fbbf24" strokeWidth="1.4" transform="rotate(45)" />
-      <rect x="-1.5" y="-1.5" width="3" height="3" fill="#fbbf24" transform="rotate(45)" />
+    <svg width="12" height="14" viewBox="-8 -7 16 14" aria-hidden>
+      <path
+        d="M -7 -3 A 7 5 0 0 1 7 -3 L 5 -1 A 5 3.5 0 0 0 -5 -1 Z"
+        fill={special ? "#ef4444" : "#fbbf24"}
+        stroke="rgba(8,9,12,0.9)"
+        strokeWidth="0.6"
+      />
+      <line x1="-5" y1="-1" x2="-1.5" y2="2" stroke="rgba(8,9,12,0.9)" strokeWidth="0.6" />
+      <line x1="5" y1="-1" x2="1.5" y2="2" stroke="rgba(8,9,12,0.9)" strokeWidth="0.6" />
+      <rect x="-2.5" y="2" width="5" height="4" fill="#92611f" stroke={special ? "#fbbf24" : "rgba(8,9,12,0.9)"} strokeWidth="0.6" />
+    </svg>
+  );
+}
+
+function BrdmDot() {
+  return (
+    <svg width="12" height="12" viewBox="-7 -7 14 14" aria-hidden>
+      <circle r="6" fill="rgba(8,9,12,0.7)" stroke="#38bdf8" strokeWidth="1" />
+      <text fontFamily="var(--font-mono)" fontSize="4" fill="#38bdf8" textAnchor="middle" y="1.5">B</text>
     </svg>
   );
 }
@@ -1213,23 +1417,6 @@ function ExitFullscreenIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M5 2v3H2M9 2v3h3M5 12V9H2M9 12V9h3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-      <line x1="6" y1="2" x2="6" y2="10" />
-      <line x1="2" y1="6" x2="10" y2="6" />
-    </svg>
-  );
-}
-
-function MinusIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-      <line x1="2" y1="6" x2="10" y2="6" />
     </svg>
   );
 }

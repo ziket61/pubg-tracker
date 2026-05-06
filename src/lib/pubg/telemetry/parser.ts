@@ -11,8 +11,23 @@ import type {
   RawTelemetryEvent,
   TelemetryScene,
   Vec3,
+  VehicleEvent,
   ZoneSample,
 } from "./types";
+
+// Items that strongly indicate a flare-called drop (vs a regular plane drop).
+// These weapons only spawn from special supply or care packages.
+const SPECIAL_DROP_ITEMS = new Set([
+  "Item_Weapon_AWM_C",
+  "Item_Weapon_Groza_C",
+  "Item_Weapon_Mk14_C",
+  "Item_Weapon_M249_C",
+  "Item_Weapon_Mk12_C",
+  "Item_Weapon_Lynx_C",
+  "Item_Attach_Weapon_Lower_AngledForeGrip_C",
+  "Item_Armor_E_03_Lv3_C",
+  "Item_Head_E_03_Lv3_C",
+]);
 
 interface RawCharacter {
   accountId?: string;
@@ -82,6 +97,9 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   const parachuteLandings: ParachuteLandingEvent[] = [];
   const zones: ZoneSample[] = [];
   const players = new Map<string, PlayerRef>();
+  // Vehicle dedup: telemetry emits one event per ride/leave per vehicle
+  // instance — we want one marker per BRDM, at its earliest known position.
+  const seenVehicles = new Map<string, VehicleEvent>();
 
   const seenPlayer = (p: PlayerRef | null) => {
     if (!p) return;
@@ -226,14 +244,49 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
       }
       case "LogCarePackageLand": {
         const ev = e as RawTelemetryEvent & {
-          itemPackage?: { itemPackageId?: string; location?: { x?: number; y?: number; z?: number } };
+          itemPackage?: {
+            itemPackageId?: string;
+            location?: { x?: number; y?: number; z?: number };
+            items?: Array<{ itemId?: string }>;
+          };
         };
         const pkg = ev.itemPackage;
         if (!pkg?.location) continue;
+        // Heuristic: a care package is "special" if it carries any of the
+        // marquee weapons that ONLY appear in flare-called drops, OR if its
+        // package id explicitly mentions special. Otherwise it's a regular
+        // plane drop.
+        const items = pkg.items ?? [];
+        const hasSpecialItem = items.some((it) =>
+          it.itemId ? SPECIAL_DROP_ITEMS.has(it.itemId) : false,
+        );
+        const idMarksSpecial = /special|flare/i.test(pkg.itemPackageId ?? "");
         carePackages.push({
           time: tOf(e),
           itemPackageId: pkg.itemPackageId ?? "unknown",
           location: vec(pkg.location),
+          kind: hasSpecialItem || idMarksSpecial ? "special" : "regular",
+        });
+        break;
+      }
+      case "LogVehicleLeave":
+      case "LogVehicleRide": {
+        // BRDM-2 markers — the user wants to know where flare-called BRDMs land.
+        const ev = e as RawTelemetryEvent & {
+          vehicle?: { vehicleType?: string; vehicleId?: string; location?: { x?: number; y?: number; z?: number } };
+        };
+        const v = ev.vehicle;
+        if (!v?.vehicleType || !v.location) continue;
+        // Only track BRDM and similar special vehicles. Skip cars/bikes —
+        // they'd flood the map.
+        if (!/BRDM|Coupe_RB|MotorGlider|Pillar/i.test(v.vehicleType)) continue;
+        const id = v.vehicleId ?? `${v.vehicleType}-${Math.round(v.location.x ?? 0)}-${Math.round(v.location.y ?? 0)}`;
+        if (seenVehicles.has(id)) continue;
+        seenVehicles.set(id, {
+          time: tOf(e),
+          vehicleType: v.vehicleType,
+          vehicleId: id,
+          location: vec(v.location),
         });
         break;
       }
@@ -244,10 +297,18 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
             poisonGasWarningRadius?: number;
             safetyZonePosition?: { x?: number; y?: number; z?: number };
             safetyZoneRadius?: number;
+            redZonePosition?: { x?: number; y?: number; z?: number };
+            redZoneRadius?: number;
           };
         };
         const g = ev.gameState;
         if (!g) continue;
+        // Some matches send redZoneRadius=0 between bombardments — treat
+        // those as "no red zone now" so we can hide it client-side.
+        const hasRedZone =
+          g.redZonePosition &&
+          typeof g.redZoneRadius === "number" &&
+          g.redZoneRadius > 0;
         zones.push({
           time: tOf(e),
           poisonGasWarningPosition: g.poisonGasWarningPosition
@@ -256,6 +317,8 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
           poisonGasWarningRadius: g.poisonGasWarningRadius,
           safetyZonePosition: g.safetyZonePosition ? vec(g.safetyZonePosition) : undefined,
           safetyZoneRadius: g.safetyZoneRadius,
+          redZonePosition: hasRedZone ? vec(g.redZonePosition!) : undefined,
+          redZoneRadius: hasRedZone ? g.redZoneRadius : undefined,
         });
         break;
       }
@@ -271,6 +334,10 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   parachuteLandings.sort((a, b) => a.time - b.time);
   zones.sort((a, b) => a.time - b.time);
 
+  const vehicleSpawns = Array.from(seenVehicles.values()).sort(
+    (a, b) => a.time - b.time,
+  );
+
   return {
     matchStartTime,
     matchEndTime,
@@ -282,6 +349,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
     damages,
     carePackages,
     parachuteLandings,
+    vehicleSpawns,
     zones,
     players,
   };

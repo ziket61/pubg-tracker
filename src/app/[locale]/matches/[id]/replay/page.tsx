@@ -91,6 +91,7 @@ export default async function ReplayPage({
     zones: scene.zones,
     carePackages: scene.carePackages,
     parachuteLandings: scene.parachuteLandings,
+    vehicleSpawns: scene.vehicleSpawns,
     damageHits,
     playerEntries: Array.from(scene.players.entries()),
   };

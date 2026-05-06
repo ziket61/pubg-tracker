@@ -62,6 +62,20 @@ export interface CarePackageEvent {
   time: number;
   itemPackageId: string;
   location: Vec3;
+  /**
+   * Best-effort guess at whether this was a flare-called drop (red smoke /
+   * special items) vs a regular plane drop. We infer from item composition
+   * — flare drops carry distinctive special weapons (AWM, Groza, Mk14, etc.)
+   * — and from the itemPackageId where it includes hints like "Special".
+   */
+  kind?: "regular" | "special";
+}
+
+export interface VehicleEvent {
+  time: number;
+  vehicleType: string;
+  vehicleId: string; // unique-ish id we synthesize when telemetry doesn't supply one
+  location: Vec3;
 }
 
 export interface ParachuteLandingEvent {
@@ -78,6 +92,8 @@ export interface ZoneSample {
   poisonGasWarningRadius?: number;
   safetyZonePosition?: Vec3;
   safetyZoneRadius?: number;
+  redZonePosition?: Vec3;
+  redZoneRadius?: number;
 }
 
 export interface TelemetryScene {
@@ -91,6 +107,8 @@ export interface TelemetryScene {
   damages: DamageEvent[];
   carePackages: CarePackageEvent[];
   parachuteLandings?: ParachuteLandingEvent[];
+  /** First-seen locations for special vehicles (BRDM-2). Optional — not all matches have them. */
+  vehicleSpawns?: VehicleEvent[];
   zones: ZoneSample[];
   players: Map<string, PlayerRef>;
 }
