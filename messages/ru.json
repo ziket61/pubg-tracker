@@ -1,0 +1,152 @@
+{
+  "common": {
+    "appName": "PUBG Tracker",
+    "loading": "Загрузка…",
+    "search": "Найти",
+    "viewAll": "Посмотреть все",
+    "back": "Назад",
+    "retry": "Повторить",
+    "demoMode": "Демо-режим — данные из локальных фикстур",
+    "notFound": "Не найдено",
+    "noData": "Нет данных",
+    "of": "из"
+  },
+  "nav": {
+    "home": "Главная",
+    "leaderboards": "Лидерборды",
+    "seasons": "Сезоны",
+    "about": "О проекте"
+  },
+  "platforms": {
+    "steam": "Steam",
+    "psn": "PlayStation",
+    "xbox": "Xbox",
+    "kakao": "Kakao",
+    "console": "Консоль",
+    "stadia": "Stadia"
+  },
+  "modes": {
+    "solo": "Solo TPP",
+    "duo": "Duo TPP",
+    "squad": "Squad TPP",
+    "solo-fpp": "Solo FPP",
+    "duo-fpp": "Duo FPP",
+    "squad-fpp": "Squad FPP"
+  },
+  "search": {
+    "placeholder": "Введите ник игрока",
+    "platformLabel": "Платформа",
+    "submit": "Поиск",
+    "tooShort": "Минимум 3 символа",
+    "hint": "Имя игрока чувствительно к регистру"
+  },
+  "home": {
+    "heroEyebrow": "BATTLEGROUNDS · STAT TRACKER",
+    "heroTitle": "Узнай свою статистику",
+    "heroTitleAccent": "в PUBG",
+    "heroSubtitle": "Профили, матчи, лидерборды и мастерство оружия. Без рекламы и регистрации.",
+    "featured": "Топ текущего сезона",
+    "demoNote": "Сейчас вы видите демо-данные. Чтобы получить реальную статистику — добавьте PUBG_API_KEY в .env.local."
+  },
+  "player": {
+    "title": "Профиль",
+    "platform": "Платформа",
+    "lifetime": "За всё время",
+    "season": "Сезон",
+    "modeLabel": "Режим",
+    "tabs": {
+      "overview": "Обзор",
+      "matches": "Матчи",
+      "mastery": "Мастерство"
+    },
+    "noMatches": "Свежих матчей не найдено",
+    "lastMatches": "Последние матчи"
+  },
+  "stats": {
+    "kills": "Убийств",
+    "deaths": "Смертей",
+    "kd": "K/D",
+    "wins": "Побед",
+    "top10s": "Топ-10",
+    "winRate": "Винрейт",
+    "rounds": "Игр",
+    "damage": "Урон",
+    "avgDamage": "Средний урон",
+    "longestKill": "Дальний выстрел",
+    "headshots": "Хедшоты",
+    "headshotRate": "Хедшоты %",
+    "assists": "Помощи",
+    "boosts": "Бустеры",
+    "heals": "Лечилки",
+    "revives": "Подняты",
+    "dbnos": "Нокдауны",
+    "killStreak": "Серия убийств",
+    "timeSurvived": "Выжил",
+    "rideDistance": "На транспорте",
+    "walkDistance": "Пешком",
+    "swimDistance": "Вплавь",
+    "weaponsAcquired": "Подобрано оружия",
+    "rankPoints": "Ранговые очки"
+  },
+  "match": {
+    "title": "Матч",
+    "duration": "Длительность",
+    "map": "Карта",
+    "mode": "Режим",
+    "createdAt": "Дата",
+    "winner": "Победитель",
+    "place": "{place} место",
+    "roster": "Состав",
+    "highlights": "Хайлайты",
+    "longestKill": "Самый дальний кил",
+    "topDamage": "Лидер по урону",
+    "topKills": "Лидер по килам",
+    "viewProfile": "Профиль",
+    "telemetry": "Телеметрия",
+    "telemetryUnavailable": "Телеметрия недоступна"
+  },
+  "mastery": {
+    "title": "Мастерство",
+    "weaponTab": "Оружие",
+    "survivalTab": "Выживание",
+    "level": "Уровень",
+    "tier": "Тир",
+    "xp": "Опыт",
+    "noData": "Данных о мастерстве нет"
+  },
+  "leaderboard": {
+    "title": "Лидерборд",
+    "selectSeason": "Сезон",
+    "selectMode": "Режим",
+    "rank": "#",
+    "player": "Игрок",
+    "rankPoints": "Очки",
+    "wins": "Победы",
+    "games": "Игры",
+    "avgDamage": "Средний урон",
+    "kda": "KDA",
+    "noEntries": "Лидерборд пуст"
+  },
+  "seasons": {
+    "title": "Сезоны",
+    "current": "Текущий",
+    "off": "Межсезонье",
+    "id": "Идентификатор",
+    "noSeasons": "Сезоны не найдены"
+  },
+  "about": {
+    "title": "О проекте",
+    "intro": "PUBG Tracker — это веб-приложение для просмотра статистики игроков PUBG: BATTLEGROUNDS на основе официального публичного API.",
+    "stack": "Стек: Next.js 15, TypeScript, Tailwind CSS, next-intl.",
+    "disclaimer": "Этот проект не связан с KRAFTON, Inc. или PUBG STUDIOS. PUBG — зарегистрированный товарный знак KRAFTON, Inc.",
+    "sourceLabel": "Документация API",
+    "assetsLabel": "Репозиторий ассетов"
+  },
+  "errors": {
+    "title": "Что-то пошло не так",
+    "rateLimited": "Превышен лимит запросов к PUBG API. Попробуйте через {seconds} с.",
+    "notFound": "Игрок или ресурс не найден",
+    "unknown": "Непредвиденная ошибка",
+    "noKey": "API-ключ не задан. Включите PUBG_USE_MOCKS=1 или укажите PUBG_API_KEY в .env.local."
+  }
+}

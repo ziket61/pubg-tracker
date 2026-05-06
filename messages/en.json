@@ -1,0 +1,152 @@
+{
+  "common": {
+    "appName": "PUBG Tracker",
+    "loading": "Loading…",
+    "search": "Search",
+    "viewAll": "View all",
+    "back": "Back",
+    "retry": "Retry",
+    "demoMode": "Demo mode — using local fixtures",
+    "notFound": "Not found",
+    "noData": "No data",
+    "of": "of"
+  },
+  "nav": {
+    "home": "Home",
+    "leaderboards": "Leaderboards",
+    "seasons": "Seasons",
+    "about": "About"
+  },
+  "platforms": {
+    "steam": "Steam",
+    "psn": "PlayStation",
+    "xbox": "Xbox",
+    "kakao": "Kakao",
+    "console": "Console",
+    "stadia": "Stadia"
+  },
+  "modes": {
+    "solo": "Solo TPP",
+    "duo": "Duo TPP",
+    "squad": "Squad TPP",
+    "solo-fpp": "Solo FPP",
+    "duo-fpp": "Duo FPP",
+    "squad-fpp": "Squad FPP"
+  },
+  "search": {
+    "placeholder": "Enter player name",
+    "platformLabel": "Platform",
+    "submit": "Search",
+    "tooShort": "At least 3 characters",
+    "hint": "Player name is case-sensitive"
+  },
+  "home": {
+    "heroEyebrow": "BATTLEGROUNDS · STAT TRACKER",
+    "heroTitle": "Know your stats",
+    "heroTitleAccent": "in PUBG",
+    "heroSubtitle": "Profiles, matches, leaderboards, and weapon mastery. No ads, no signup.",
+    "featured": "Top of the current season",
+    "demoNote": "You're seeing demo data. To get real stats, add PUBG_API_KEY to .env.local."
+  },
+  "player": {
+    "title": "Profile",
+    "platform": "Platform",
+    "lifetime": "Lifetime",
+    "season": "Season",
+    "modeLabel": "Mode",
+    "tabs": {
+      "overview": "Overview",
+      "matches": "Matches",
+      "mastery": "Mastery"
+    },
+    "noMatches": "No recent matches found",
+    "lastMatches": "Recent matches"
+  },
+  "stats": {
+    "kills": "Kills",
+    "deaths": "Deaths",
+    "kd": "K/D",
+    "wins": "Wins",
+    "top10s": "Top 10s",
+    "winRate": "Win rate",
+    "rounds": "Rounds",
+    "damage": "Damage",
+    "avgDamage": "Avg damage",
+    "longestKill": "Longest kill",
+    "headshots": "Headshots",
+    "headshotRate": "HS rate",
+    "assists": "Assists",
+    "boosts": "Boosts",
+    "heals": "Heals",
+    "revives": "Revives",
+    "dbnos": "DBNOs",
+    "killStreak": "Kill streak",
+    "timeSurvived": "Time survived",
+    "rideDistance": "Ride distance",
+    "walkDistance": "Walk distance",
+    "swimDistance": "Swim distance",
+    "weaponsAcquired": "Weapons picked",
+    "rankPoints": "Rank points"
+  },
+  "match": {
+    "title": "Match",
+    "duration": "Duration",
+    "map": "Map",
+    "mode": "Mode",
+    "createdAt": "Date",
+    "winner": "Winner",
+    "place": "Place {place}",
+    "roster": "Roster",
+    "highlights": "Highlights",
+    "longestKill": "Longest kill",
+    "topDamage": "Top damage",
+    "topKills": "Top kills",
+    "viewProfile": "Profile",
+    "telemetry": "Telemetry",
+    "telemetryUnavailable": "Telemetry unavailable"
+  },
+  "mastery": {
+    "title": "Mastery",
+    "weaponTab": "Weapons",
+    "survivalTab": "Survival",
+    "level": "Level",
+    "tier": "Tier",
+    "xp": "XP",
+    "noData": "No mastery data"
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "selectSeason": "Season",
+    "selectMode": "Mode",
+    "rank": "#",
+    "player": "Player",
+    "rankPoints": "Points",
+    "wins": "Wins",
+    "games": "Games",
+    "avgDamage": "Avg damage",
+    "kda": "KDA",
+    "noEntries": "Leaderboard is empty"
+  },
+  "seasons": {
+    "title": "Seasons",
+    "current": "Current",
+    "off": "Off-season",
+    "id": "ID",
+    "noSeasons": "No seasons found"
+  },
+  "about": {
+    "title": "About",
+    "intro": "PUBG Tracker is a web app for viewing PUBG: BATTLEGROUNDS player statistics built on the official public API.",
+    "stack": "Stack: Next.js 15, TypeScript, Tailwind CSS, next-intl.",
+    "disclaimer": "This project is not affiliated with KRAFTON, Inc. or PUBG STUDIOS. PUBG is a registered trademark of KRAFTON, Inc.",
+    "sourceLabel": "API documentation",
+    "assetsLabel": "Asset repository"
+  },
+  "errors": {
+    "title": "Something went wrong",
+    "rateLimited": "PUBG API rate limit reached. Try again in {seconds}s.",
+    "notFound": "Player or resource not found",
+    "unknown": "Unexpected error",
+    "noKey": "API key is not set. Either enable PUBG_USE_MOCKS=1 or provide PUBG_API_KEY in .env.local."
+  }
+}

@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #08090c;
+  color: #eef0f6;
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background-color: #f3a536;
+  color: #08090c;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #08090c;
+}
+::-webkit-scrollbar-thumb {
+  background: #262a3a;
+  border-radius: 8px;
+  border: 2px solid #08090c;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3f55;
+}
+
+@layer utilities {
+  .text-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  .text-shadow-glow {
+    text-shadow: 0 0 20px rgba(243, 165, 54, 0.45);
+  }
+
+  .ring-focus {
+    @apply outline-none ring-2 ring-brand/50 ring-offset-2 ring-offset-bg;
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      #1a1d28 0%,
+      #262a3a 30%,
+      #1a1d28 60%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  .surface-raised {
+    background:
+      radial-gradient(ellipse at top right, rgba(243, 165, 54, 0.06), transparent 55%),
+      linear-gradient(180deg, #1a1d2a 0%, #141722 100%);
+  }
+
+  .surface-hero {
+    background:
+      radial-gradient(ellipse at top right, rgba(243, 165, 54, 0.18), transparent 55%),
+      radial-gradient(ellipse at bottom left, rgba(56, 189, 248, 0.08), transparent 50%),
+      linear-gradient(180deg, #141828 0%, #0c0e16 100%);
+  }
+}

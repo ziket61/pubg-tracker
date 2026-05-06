@@ -1,0 +1,24 @@
+{
+  "repo": "pubg/api-assets",
+  "branch": "master",
+  "paths": [
+    "Assets/Item/Weapon/Main",
+    "Assets/Item/Weapon/Attach",
+    "Assets/Item/Weapon/Throwables",
+    "Assets/Item/Equipment",
+    "Assets/Item/Heal",
+    "Assets/Item/Use",
+    "Assets/Item/Ammunition",
+    "Assets/Vehicle"
+  ],
+  "files": [
+    "Dictionaries/telemetry/item/itemId.json",
+    "Dictionaries/telemetry/item/skinId.json",
+    "Dictionaries/telemetry/vehicle/vehicleId.json",
+    "Dictionaries/telemetry/mapName.json",
+    "Dictionaries/telemetry/damageCauserName.json",
+    "Dictionaries/telemetry/gameMode.json",
+    "seasons.json",
+    "survivalTitles.json"
+  ]
+}
