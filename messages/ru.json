@@ -19,6 +19,7 @@
   "nav": {
     "home": "Главная",
     "leaderboards": "Лидерборды",
+    "compare": "Сравнить",
     "seasons": "Сезоны",
     "about": "О проекте"
   },
@@ -51,7 +52,9 @@
     "heroTitleAccent": "в PUBG",
     "heroSubtitle": "Профили, матчи, лидерборды и мастерство оружия. Без рекламы и регистрации.",
     "featured": "Топ текущего сезона",
-    "demoNote": "Сейчас вы видите демо-данные. Чтобы получить реальную статистику — добавьте PUBG_API_KEY в .env.local."
+    "demoNote": "Сейчас вы видите демо-данные. Чтобы получить реальную статистику — добавьте PUBG_API_KEY в .env.local.",
+    "favorites": "Избранные игроки",
+    "recentPlayers": "Недавно открытые"
   },
   "player": {
     "title": "Профиль",
@@ -73,7 +76,11 @@
     "bestPlaceShort": "лучшее: #{place}",
     "placementStrip": "Хронология мест",
     "bestMatch": "Лучший матч",
-    "openMatch": "Открыть матч"
+    "openMatch": "Открыть матч",
+    "favorite": "В избранное",
+    "favored": "В избранном",
+    "addFavorite": "Добавить в избранное",
+    "removeFavorite": "Убрать из избранного"
   },
   "stats": {
     "kills": "Убийств",
@@ -127,7 +134,18 @@
     "survived": "Прожил",
     "totalDamageTaken": "Получено урона всего",
     "damageLeadup": "Последние полученные удары",
-    "openReplay": "Открыть 2D replay"
+    "openReplay": "Открыть 2D replay",
+    "damageTimeline": "Хронология урона",
+    "totalDamageGiven": "Урона нанёс",
+    "knocksDealt": "Нокаутов",
+    "killsDealt": "Убийств",
+    "kindDamageDealt": "Урон",
+    "kindDamageTaken": "Получил",
+    "kindKnockGiven": "Нокаут",
+    "kindKnockTaken": "Был нокнут",
+    "kindKill": "Кил",
+    "kindDeath": "Смерть",
+    "showingFirstN": "Показано {count} из {total}"
   },
   "replay": {
     "title": "2D replay",
@@ -154,6 +172,19 @@
     "tier": "Тир",
     "xp": "Опыт",
     "noData": "Данных о мастерстве нет"
+  },
+  "compare": {
+    "title": "Сравнение игроков",
+    "subtitle": "Введи два ника — увидишь lifetime, K/D, винрейт, форму последних 5 матчей рядом.",
+    "playerA": "Игрок A",
+    "playerB": "Игрок B",
+    "submit": "Сравнить",
+    "loadingTitle": "Считаем…",
+    "notFoundTitle": "Не найдено",
+    "notFoundDetail": "Не нашли: {who}. Проверь регистр и платформу.",
+    "notEnoughData": "Недостаточно данных для сравнения.",
+    "metric": "Показатель",
+    "recentSection": "Форма последних 5 матчей"
   },
   "leaderboard": {
     "title": "Лидерборд",

@@ -16,6 +16,7 @@ import { PlayerTabs } from "@/components/player/PlayerTabs";
 import { StatGridSkeleton } from "@/components/ui/Skeleton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { ExternalLinks } from "@/components/common/ExternalLinks";
+import { FavoriteButton } from "@/components/player/FavoriteButton";
 import { ownPlayerUrl, pubgReportLinks } from "@/lib/external-links";
 
 const RECENT_MATCH_FETCH_LIMIT = 6;
@@ -55,11 +56,14 @@ export default async function PlayerOverviewPage({
     <div className="space-y-5">
       <PlayerHeader locale={locale} player={player} />
 
-      <ExternalLinks
-        locale={locale}
-        copyValue={profileUrl}
-        links={pr.player ? [{ href: pr.player, label: "PUBG Report", external: true }] : undefined}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <FavoriteButton name={player.name} shard={platform} />
+        <ExternalLinks
+          locale={locale}
+          copyValue={profileUrl}
+          links={pr.player ? [{ href: pr.player, label: "PUBG Report", external: true }] : undefined}
+        />
+      </div>
 
       <PlayerTabs locale={locale} shard={platform} name={decoded} active="overview" />
 

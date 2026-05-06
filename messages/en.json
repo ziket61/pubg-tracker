@@ -19,6 +19,7 @@
   "nav": {
     "home": "Home",
     "leaderboards": "Leaderboards",
+    "compare": "Compare",
     "seasons": "Seasons",
     "about": "About"
   },
@@ -51,7 +52,9 @@
     "heroTitleAccent": "in PUBG",
     "heroSubtitle": "Profiles, matches, leaderboards, and weapon mastery. No ads, no signup.",
     "featured": "Top of the current season",
-    "demoNote": "You're seeing demo data. To get real stats, add PUBG_API_KEY to .env.local."
+    "demoNote": "You're seeing demo data. To get real stats, add PUBG_API_KEY to .env.local.",
+    "favorites": "Favorite players",
+    "recentPlayers": "Recently viewed"
   },
   "player": {
     "title": "Profile",
@@ -73,7 +76,11 @@
     "bestPlaceShort": "best: #{place}",
     "placementStrip": "Placement timeline",
     "bestMatch": "Best match",
-    "openMatch": "Open match"
+    "openMatch": "Open match",
+    "favorite": "Favorite",
+    "favored": "Favorited",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites"
   },
   "stats": {
     "kills": "Kills",
@@ -127,7 +134,18 @@
     "survived": "Survived",
     "totalDamageTaken": "Total damage taken",
     "damageLeadup": "Damage taken before death",
-    "openReplay": "Open 2D replay"
+    "openReplay": "Open 2D replay",
+    "damageTimeline": "Damage timeline",
+    "totalDamageGiven": "Damage dealt",
+    "knocksDealt": "Knocks",
+    "killsDealt": "Kills",
+    "kindDamageDealt": "Damage",
+    "kindDamageTaken": "Took",
+    "kindKnockGiven": "Knock",
+    "kindKnockTaken": "Knocked",
+    "kindKill": "Kill",
+    "kindDeath": "Death",
+    "showingFirstN": "Showing {count} of {total}"
   },
   "replay": {
     "title": "2D replay",
@@ -154,6 +172,19 @@
     "tier": "Tier",
     "xp": "XP",
     "noData": "No mastery data"
+  },
+  "compare": {
+    "title": "Compare players",
+    "subtitle": "Type two names — see lifetime, K/D, win rate, and recent form side by side.",
+    "playerA": "Player A",
+    "playerB": "Player B",
+    "submit": "Compare",
+    "loadingTitle": "Crunching…",
+    "notFoundTitle": "Not found",
+    "notFoundDetail": "Couldn't find: {who}. Check spelling and platform.",
+    "notEnoughData": "Not enough data to compare.",
+    "metric": "Metric",
+    "recentSection": "Recent 5-match form"
   },
   "leaderboard": {
     "title": "Leaderboard",

@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SearchHero } from "@/components/search/SearchHero";
 import { LeaderboardTable } from "@/components/leaderboards/LeaderboardTable";
+import { RecentPlayersWidget } from "@/components/home/RecentPlayersWidget";
 import type { Locale } from "@/lib/i18n/routing";
 import { Link } from "@/lib/i18n/navigation";
 
@@ -22,6 +23,8 @@ export default async function HomePage({
   return (
     <div className="space-y-8">
       <SearchHero locale={locale} defaultShard={env.PUBG_DEFAULT_SHARD} />
+
+      <RecentPlayersWidget />
 
       <Card>
         <CardHeader

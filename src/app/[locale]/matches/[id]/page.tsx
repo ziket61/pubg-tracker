@@ -11,6 +11,8 @@ import { MatchHeader } from "@/components/match/MatchHeader";
 import { MatchRoster } from "@/components/match/MatchRoster";
 import { MatchHighlights } from "@/components/match/MatchHighlights";
 import { KillTree } from "@/components/match/KillTree";
+import { DeathAnalysis } from "@/components/match/DeathAnalysis";
+import { DamageTimeline } from "@/components/match/DamageTimeline";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ExternalLinks } from "@/components/common/ExternalLinks";
@@ -22,10 +24,10 @@ export default async function MatchPage({
   searchParams,
 }: {
   params: Promise<{ locale: Locale; id: string }>;
-  searchParams: Promise<{ shard?: string }>;
+  searchParams: Promise<{ shard?: string; player?: string }>;
 }) {
   const { locale, id } = await params;
-  const { shard: shardParam } = await searchParams;
+  const { shard: shardParam, player: focusPlayer } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations({ locale, namespace: "match" });
 
@@ -79,6 +81,47 @@ export default async function MatchPage({
       >
         <MatchHighlights locale={locale} match={match} />
       </Suspense>
+
+      {focusPlayer && (() => {
+        const focusParticipant = match.participants.find(
+          (p) =>
+            p.stats.name.toLowerCase() === focusPlayer.toLowerCase() ||
+            p.stats.playerId === focusPlayer,
+        );
+        if (!focusParticipant) return null;
+        return (
+          <>
+            <Suspense
+              fallback={
+                <Card>
+                  <CardHeader title={t("deathAnalysis")} />
+                  <Skeleton className="h-32 w-full" />
+                </Card>
+              }
+            >
+              <DeathAnalysis
+                locale={locale}
+                match={match}
+                accountId={focusParticipant.stats.playerId}
+              />
+            </Suspense>
+            <Suspense
+              fallback={
+                <Card>
+                  <CardHeader title={t("damageTimeline")} />
+                  <Skeleton className="h-48 w-full" />
+                </Card>
+              }
+            >
+              <DamageTimeline
+                locale={locale}
+                match={match}
+                accountId={focusParticipant.stats.playerId}
+              />
+            </Suspense>
+          </>
+        );
+      })()}
 
       <Suspense
         fallback={

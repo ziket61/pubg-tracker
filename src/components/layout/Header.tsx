@@ -25,6 +25,7 @@ export async function Header({ locale }: { locale: Locale }) {
 
         <nav className="hidden items-center gap-1 sm:flex">
           <NavLink href="/leaderboards">{t("leaderboards")}</NavLink>
+          <NavLink href="/compare">{t("compare")}</NavLink>
           <NavLink href="/seasons">{t("seasons")}</NavLink>
           <NavLink href="/about">{t("about")}</NavLink>
         </nav>

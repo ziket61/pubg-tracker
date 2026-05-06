@@ -56,9 +56,17 @@ export async function MatchRow({
   const place = participantStats?.winPlace ?? 0;
   const won = place === 1;
 
+  // When this row is a player-scoped match (we have stats for that player),
+  // pass the focus player into the match URL so the match page can show
+  // a per-player Death Analysis.
+  const focusName = participantStats?.name;
+  const matchHref = focusName
+    ? (`/matches/${match.id}?shard=${match.shardId}&player=${encodeURIComponent(focusName)}` as `/matches/${string}`)
+    : (`/matches/${match.id}?shard=${match.shardId}` as `/matches/${string}`);
+
   return (
     <Link
-      href={`/matches/${match.id}`}
+      href={matchHref}
       className={`group flex flex-wrap items-center gap-3 rounded-lg border bg-bg-muted px-3 py-3 transition-all hover:bg-surface-hover ${
         won
           ? "border-tier-gold/40 hover:border-tier-gold/60 hover:shadow-[0_0_12px_-2px_rgba(251,191,36,0.3)]"
