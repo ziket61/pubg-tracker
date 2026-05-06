@@ -156,7 +156,12 @@
     "carePackage": "Дроп",
     "noDrops": "Дропов в этом матче не было",
     "nearbyKills": "Рядом убийств: {n}",
-    "weaponBreakdown": "По оружию"
+    "weaponBreakdown": "По оружию",
+    "lootTimeline": "Лут (хронология)",
+    "lootPickup": "Подбор",
+    "lootEquip": "Экип",
+    "lootUse": "Использовал",
+    "lootDrop": "Сбросил"
   },
   "replay": {
     "title": "2D replay",

@@ -156,7 +156,12 @@
     "carePackage": "Drop",
     "noDrops": "No drops in this match",
     "nearbyKills": "Kills nearby: {n}",
-    "weaponBreakdown": "Weapon breakdown"
+    "weaponBreakdown": "Weapon breakdown",
+    "lootTimeline": "Loot timeline",
+    "lootPickup": "Picked up",
+    "lootEquip": "Equipped",
+    "lootUse": "Used",
+    "lootDrop": "Dropped"
   },
   "replay": {
     "title": "2D replay",

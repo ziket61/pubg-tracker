@@ -16,6 +16,7 @@ import { DamageTimeline } from "@/components/match/DamageTimeline";
 import { PlayerRouteMap } from "@/components/match/PlayerRouteMap";
 import { WeaponBreakdown } from "@/components/match/WeaponBreakdown";
 import { CarePackageTracker } from "@/components/match/CarePackageTracker";
+import { LootTimeline } from "@/components/match/LootTimeline";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ExternalLinks } from "@/components/common/ExternalLinks";
@@ -147,6 +148,20 @@ export default async function MatchPage({
               }
             >
               <DamageTimeline
+                locale={locale}
+                match={match}
+                accountId={focusParticipant.stats.playerId}
+              />
+            </Suspense>
+            <Suspense
+              fallback={
+                <Card>
+                  <CardHeader title={t("lootTimeline")} />
+                  <Skeleton className="h-48 w-full" />
+                </Card>
+              }
+            >
+              <LootTimeline
                 locale={locale}
                 match={match}
                 accountId={focusParticipant.stats.playerId}
