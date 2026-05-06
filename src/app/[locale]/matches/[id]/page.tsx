@@ -15,7 +15,7 @@ import { DeathAnalysis } from "@/components/match/DeathAnalysis";
 import { DamageTimeline } from "@/components/match/DamageTimeline";
 import { MiniReplayMap } from "@/components/match/MiniReplayMap";
 import { WeaponBreakdown } from "@/components/match/WeaponBreakdown";
-import { CarePackageTracker } from "@/components/match/CarePackageTracker";
+import { TeamCard } from "@/components/match/TeamCard";
 import { LootTimeline } from "@/components/match/LootTimeline";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -95,6 +95,13 @@ export default async function MatchPage({
         if (!focusParticipant) return null;
         return (
           <>
+            <TeamCard
+              locale={locale}
+              match={match}
+              shard={shard}
+              focusAccountId={focusParticipant.stats.playerId}
+            />
+
             <Suspense
               fallback={
                 <Card>
@@ -107,6 +114,7 @@ export default async function MatchPage({
                 locale={locale}
                 match={match}
                 accountId={focusParticipant.stats.playerId}
+                shard={shard}
               />
             </Suspense>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -152,6 +160,7 @@ export default async function MatchPage({
                 locale={locale}
                 match={match}
                 accountId={focusParticipant.stats.playerId}
+                shard={shard}
               />
             </Suspense>
             <Suspense
@@ -180,18 +189,7 @@ export default async function MatchPage({
           </Card>
         }
       >
-        <KillTree locale={locale} match={match} />
-      </Suspense>
-
-      <Suspense
-        fallback={
-          <Card>
-            <CardHeader title={t("carePackages")} />
-            <Skeleton className="h-72 w-full" />
-          </Card>
-        }
-      >
-        <CarePackageTracker locale={locale} match={match} shard={shard} />
+        <KillTree locale={locale} match={match} shard={shard} />
       </Suspense>
 
       <Card>

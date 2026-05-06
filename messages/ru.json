@@ -163,7 +163,9 @@
     "lootPickup": "Подбор",
     "lootEquip": "Экип",
     "lootUse": "Использовал",
-    "lootDrop": "Сбросил"
+    "lootDrop": "Сбросил",
+    "myTeam": "Моя команда",
+    "youMarker": "вы"
   },
   "replay": {
     "title": "2D replay",
@@ -173,6 +175,8 @@
     "trails": "След",
     "zone": "Зона",
     "kills": "Убийства",
+    "drops": "Дропы",
+    "tracers": "Выстрелы",
     "focusPlayer": "Фокус на игроке",
     "none": "никого",
     "legend": "Легенда",

@@ -1,21 +1,25 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { MatchDetails } from "@/lib/pubg/types";
+import type { Shard } from "@/lib/pubg/shards";
 import { getTelemetry } from "@/lib/pubg/client";
 import { parseTelemetry } from "@/lib/pubg/telemetry/parser";
 import { buildKillTree } from "@/lib/pubg/telemetry/kill-tree";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PlayerLink } from "@/components/common/PlayerLink";
 import { getItemName } from "@/lib/assets/names";
 import { formatDuration } from "@/lib/format/duration";
 
 export async function KillTree({
   locale,
   match,
+  shard,
 }: {
   locale: Locale;
   match: MatchDetails;
+  shard: Shard;
 }) {
   const t = await getTranslations({ locale, namespace: "match" });
   const tc = await getTranslations({ locale, namespace: "common" });
@@ -77,13 +81,13 @@ export async function KillTree({
                   <span className="truncate">
                     {v.knockedBy && v.knockedBy.accountId !== v.killedBy?.accountId && (
                       <>
-                        <span className="text-fg-muted">{v.knockedBy.name}</span>
+                        <PlayerLink name={v.knockedBy.name} shard={shard} className="text-fg-muted" />
                         <span className="mx-1.5 text-fg-subtle">{t("knockedShort")}</span>
                       </>
                     )}
-                    <span className="text-combat">{v.killedBy?.name ?? "—"}</span>
+                    <PlayerLink name={v.killedBy?.name} shard={shard} className="text-combat" />
                     <span className="mx-1.5 text-fg-subtle">→</span>
-                    <span className="font-medium text-fg">{v.victim.name}</span>
+                    <PlayerLink name={v.victim.name} shard={shard} className="font-medium text-fg" />
                   </span>
                   <span className="flex items-center gap-1.5 text-right">
                     {v.isHeadshot && <Badge tone="combat">HS</Badge>}

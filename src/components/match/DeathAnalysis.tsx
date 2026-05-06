@@ -1,12 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { MatchDetails } from "@/lib/pubg/types";
+import type { Shard } from "@/lib/pubg/shards";
 import { getTelemetry } from "@/lib/pubg/client";
 import { parseTelemetry } from "@/lib/pubg/telemetry/parser";
 import { analyzeDeath } from "@/lib/pubg/telemetry/death-analysis";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PlayerLink } from "@/components/common/PlayerLink";
 import { getItemName } from "@/lib/assets/names";
 import { formatDuration } from "@/lib/format/duration";
 
@@ -14,10 +16,12 @@ export async function DeathAnalysis({
   locale,
   match,
   accountId,
+  shard,
 }: {
   locale: Locale;
   match: MatchDetails;
   accountId: string;
+  shard: Shard;
 }) {
   const t = await getTranslations({ locale, namespace: "match" });
   const tc = await getTranslations({ locale, namespace: "common" });
@@ -63,7 +67,7 @@ export async function DeathAnalysis({
             {t("killedBy")}
           </div>
           <div className="mt-2 font-display text-xl font-bold text-fg">
-            {report.killer?.name ?? "—"}
+            <PlayerLink name={report.killer?.name} shard={shard} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
             <span className="font-mono">{getItemName(report.weapon)}</span>
@@ -93,7 +97,7 @@ export async function DeathAnalysis({
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-bg-muted px-3 py-2 text-xs text-fg-muted">
           <Badge tone="muted">{t("knocked")}</Badge>
           <span>
-            {report.knock.attacker?.name ?? "—"} ·{" "}
+            <PlayerLink name={report.knock.attacker?.name} shard={shard} /> ·{" "}
             <span className="font-mono">{getItemName(report.knock.weapon)}</span>
             {report.knock.distance > 0 && (
               <span className="font-mono tabular-nums">
@@ -120,7 +124,7 @@ export async function DeathAnalysis({
                   {formatDuration(d.time)}
                 </span>
                 <span className="truncate">
-                  <span className="text-combat">{d.attacker?.name ?? tc("unknown")}</span>{" "}
+                  <PlayerLink name={d.attacker?.name} shard={shard} className="text-combat" fallback={tc("unknown")} />{" "}
                   <span className="font-mono text-fg-muted">{getItemName(d.weapon)}</span>
                 </span>
                 <span className="font-mono tabular-nums text-combat">

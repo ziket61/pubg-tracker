@@ -163,7 +163,9 @@
     "lootPickup": "Picked up",
     "lootEquip": "Equipped",
     "lootUse": "Used",
-    "lootDrop": "Dropped"
+    "lootDrop": "Dropped",
+    "myTeam": "My team",
+    "youMarker": "you"
   },
   "replay": {
     "title": "2D replay",
@@ -173,6 +175,8 @@
     "trails": "Trails",
     "zone": "Zone",
     "kills": "Kills",
+    "drops": "Drops",
+    "tracers": "Tracers",
     "focusPlayer": "Focus player",
     "none": "none",
     "legend": "Legend",

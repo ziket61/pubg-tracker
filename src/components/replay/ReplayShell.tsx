@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { PlayerRef, TelemetryScene } from "@/lib/pubg/telemetry/types";
+import type { DamageEvent, PlayerRef, TelemetryScene } from "@/lib/pubg/telemetry/types";
 import { snapshotAt, trailFor, zoneAt } from "@/lib/pubg/telemetry/timeline";
 import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
 import { killHeat, landingHeat, type HeatBucket } from "@/lib/pubg/telemetry/heatmap";
 import type { MapMeta } from "@/lib/pubg/maps";
+import type { Shard } from "@/lib/pubg/shards";
+import { getItemName } from "@/lib/assets/names";
+import { PlayerLink } from "@/components/common/PlayerLink";
 import { MapCanvas } from "./MapCanvas";
 import Link from "next/link";
 
@@ -38,6 +41,11 @@ export interface SerializableScene {
   knocks: TelemetryScene["knocks"];
   zones: TelemetryScene["zones"];
   carePackages: TelemetryScene["carePackages"];
+  /**
+   * Subset of damage events with attacker + victim locations attached, for
+   * the tracer animation. Filtered to damage >= 5 to skip noise.
+   */
+  damageHits: DamageEvent[];
   // players is a Map — pre-serialize as array of [id, ref] for client transport
   playerEntries: Array<[string, PlayerRef]>;
 }
@@ -45,6 +53,7 @@ export interface SerializableScene {
 export function ReplayShell({
   scene: serialized,
   map,
+  shard,
   defaultFocusId,
   autoPlay = false,
   compact = false,
@@ -52,6 +61,8 @@ export function ReplayShell({
 }: {
   scene: SerializableScene;
   map: MapMeta;
+  /** Player shard for nickname links in the sidebar. */
+  shard: Shard;
   defaultFocusId?: string;
   /** Start playing immediately on mount. Defaults to false. */
   autoPlay?: boolean;
@@ -73,7 +84,7 @@ export function ReplayShell({
       positions: serialized.positions,
       kills: serialized.kills,
       knocks: serialized.knocks,
-      damages: [],
+      damages: serialized.damageHits,
       carePackages: serialized.carePackages,
       zones: serialized.zones,
       players: new Map(serialized.playerEntries),
@@ -88,6 +99,8 @@ export function ReplayShell({
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
   const [showKills, setShowKills] = useState(true);
+  const [showDrops, setShowDrops] = useState(true);
+  const [showTracers, setShowTracers] = useState(true);
   const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -138,6 +151,30 @@ export function ReplayShell({
     if (!showKills) return [];
     return scene.kills.filter((k) => k.time <= time + 0.001);
   }, [scene.kills, time, showKills]);
+
+  // Care packages that have already dropped at the current playback time.
+  const visibleDrops = useMemo(() => {
+    if (!showDrops) return [];
+    return scene.carePackages.filter((c) => c.time <= time + 0.001);
+  }, [scene.carePackages, time, showDrops]);
+
+  // Damage tracers — only damages happening within ±1.5 sec of current time.
+  // Filtered to events that have BOTH attacker and victim location.
+  const TRACER_WINDOW = 1.5;
+  const activeTracers = useMemo(() => {
+    if (!showTracers || compact) return [];
+    return scene.damages.filter(
+      (d) =>
+        d.attackerLocation &&
+        d.victimLocation &&
+        Math.abs(d.time - time) <= TRACER_WINDOW,
+    );
+  }, [scene.damages, time, showTracers, compact]);
+
+  // Killfeed: last 6 kills that have happened at or before the current time.
+  const killfeed = useMemo(() => {
+    return scene.kills.filter((k) => k.time <= time + 0.001).slice(-6).reverse();
+  }, [scene.kills, time]);
 
   // Players, sorted: focus first, then alive count
   const sortedPlayers = useMemo(() => {
@@ -196,6 +233,59 @@ export function ReplayShell({
                 />
               );
             })}
+
+          {/* Drops (care packages) — yellow stars with timestamp */}
+          {visibleDrops.map((d, idx) => {
+            const p = gameToCanvas(d.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
+            const fresh = time - d.time < 4;
+            return (
+              <g key={`drop-${idx}`}>
+                {fresh && (
+                  <circle cx={p.x} cy={p.y} r="14" fill="none" stroke="#fbbf24" strokeWidth="1.5" opacity="0.8">
+                    <animate attributeName="r" from="6" to="22" dur="1.2s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" from="0.8" to="0" dur="1.2s" repeatCount="indefinite" />
+                  </circle>
+                )}
+                <polygon
+                  points={`${p.x},${p.y - 6} ${p.x + 1.5},${p.y - 1.5} ${p.x + 6},${p.y - 1.5} ${p.x + 2.5},${p.y + 1} ${p.x + 4},${p.y + 6} ${p.x},${p.y + 3} ${p.x - 4},${p.y + 6} ${p.x - 2.5},${p.y + 1} ${p.x - 6},${p.y - 1.5} ${p.x - 1.5},${p.y - 1.5}`}
+                  fill="#fbbf24"
+                  stroke="rgba(8,9,12,0.9)"
+                  strokeWidth="0.8"
+                />
+              </g>
+            );
+          })}
+
+          {/* Damage tracers — line from attacker to victim, fading by time delta */}
+          {activeTracers.map((d: DamageEvent, i) => {
+            if (!d.attackerLocation || !d.victimLocation) return null;
+            const a = gameToCanvas(d.attackerLocation, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
+            const b = gameToCanvas(d.victimLocation, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
+            const age = Math.abs(time - d.time);
+            const opacity = Math.max(0.05, 1 - age / TRACER_WINDOW);
+            const intensity = Math.min(1, d.damage / 50);
+            return (
+              <g key={`tracer-${i}`}>
+                <line
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="#fb923c"
+                  strokeWidth={1 + intensity * 1.5}
+                  opacity={opacity}
+                  strokeLinecap="round"
+                />
+                <circle
+                  cx={b.x}
+                  cy={b.y}
+                  r={2 + intensity * 2}
+                  fill="#ef4444"
+                  opacity={opacity}
+                />
+              </g>
+            );
+          })}
 
           {visibleKills.map((k, idx) => {
             if (!k.victim.location) return null;
@@ -286,7 +376,40 @@ export function ReplayShell({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div>
-        {mapInner}
+        <div className="relative">
+          {mapInner}
+          {/* Killfeed — overlay on top-right of the map */}
+          {killfeed.length > 0 && (
+            <div className="pointer-events-none absolute right-3 top-12 w-[260px] space-y-1">
+              {killfeed.map((k, i) => {
+                const age = time - k.time;
+                const fresh = age < 5;
+                const opacity = age < 30 ? Math.max(0.45, 1 - age / 30) : 0.35;
+                return (
+                  <div
+                    key={`kf-${i}-${k.time}`}
+                    className={`rounded-md border border-border bg-bg/85 px-2 py-1 font-mono text-[11px] backdrop-blur-sm ${
+                      fresh ? "border-combat/50 shadow-[0_0_12px_-2px_rgba(239,68,68,0.4)]" : ""
+                    }`}
+                    style={{ opacity }}
+                  >
+                    <span className="text-fg-muted">{k.killer?.name ?? "—"}</span>
+                    <span className="mx-1.5 text-combat">→</span>
+                    <span className="text-fg">{k.victim.name}</span>
+                    <span className="ml-2 text-[9px] text-fg-subtle">
+                      {getItemName(k.damageCauserName)}
+                    </span>
+                    {k.isHeadshot && (
+                      <span className="ml-1 rounded bg-combat/20 px-1 text-[9px] uppercase text-combat">
+                        HS
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Controls bar under canvas */}
         <div className="mt-3 rounded-xl border border-border bg-surface p-3">
@@ -346,6 +469,8 @@ export function ReplayShell({
             <Toggle checked={showTrails} onChange={setShowTrails} label={t("trails")} />
             <Toggle checked={showZone} onChange={setShowZone} label={t("zone")} />
             <Toggle checked={showKills} onChange={setShowKills} label={t("kills")} />
+            <Toggle checked={showDrops} onChange={setShowDrops} label={t("drops")} />
+            <Toggle checked={showTracers} onChange={setShowTracers} label={t("tracers")} />
             <span className="ml-auto inline-flex items-center gap-1 rounded border border-border bg-bg-muted p-0.5">
               {(["off", "kills", "landings"] as const).map((m) => (
                 <button
@@ -387,23 +512,34 @@ export function ReplayShell({
               — {t("none")} —
             </button>
             {sortedPlayers.map(({ id, p }) => (
-              <button
+              <div
                 key={id}
-                type="button"
-                onClick={() => setFocusId(id)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
+                className={`group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
                   focusId === id ? "bg-bg-muted text-fg" : "text-fg-muted hover:bg-bg-muted hover:text-fg"
                 }`}
               >
-                <span
-                  className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-                  style={{ backgroundColor: teamColor(p.teamId) }}
+                <button
+                  type="button"
+                  onClick={() => setFocusId(id)}
+                  className="flex flex-1 items-center gap-2 truncate text-left"
+                  aria-label={`focus ${p.name}`}
+                >
+                  <span
+                    className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: teamColor(p.teamId) }}
+                  />
+                  <span className="truncate">{p.name}</span>
+                  {p.teamId != null && (
+                    <span className="ml-auto font-mono text-[10px] text-fg-subtle">T{p.teamId}</span>
+                  )}
+                </button>
+                <PlayerLink
+                  name={p.name}
+                  shard={shard}
+                  className="text-fg-subtle hover:text-brand text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
+                  fallback="↗"
                 />
-                <span className="truncate">{p.name}</span>
-                {p.teamId != null && (
-                  <span className="ml-auto font-mono text-[10px] text-fg-subtle">T{p.teamId}</span>
-                )}
-              </button>
+              </div>
             ))}
           </div>
           <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-subtle">

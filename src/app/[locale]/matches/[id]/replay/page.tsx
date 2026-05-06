@@ -76,7 +76,12 @@ export default async function ReplayPage({
     }
   }
 
-  // Serialize scene for client (Map → array)
+  // Serialize scene for client (Map → array). Trim damages to events with
+  // both locations + damage >= 5 to keep the payload modest (large matches
+  // can have 5k+ damage events).
+  const damageHits = scene.damages.filter(
+    (d) => d.attackerLocation && d.victimLocation && d.damage >= 5,
+  );
   const serialized: SerializableScene = {
     durationSec: scene.durationSec,
     mapName: scene.mapName,
@@ -85,6 +90,7 @@ export default async function ReplayPage({
     knocks: scene.knocks,
     zones: scene.zones,
     carePackages: scene.carePackages,
+    damageHits,
     playerEntries: Array.from(scene.players.entries()),
   };
 
@@ -98,7 +104,7 @@ export default async function ReplayPage({
         </h1>
       </div>
 
-      <ReplayShell scene={serialized} map={map} defaultFocusId={focusId} />
+      <ReplayShell scene={serialized} map={map} shard={shard} defaultFocusId={focusId} />
     </div>
   );
 }

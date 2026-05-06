@@ -4,6 +4,7 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { MatchDetails } from "@/lib/pubg/types";
+import type { Shard } from "@/lib/pubg/shards";
 import { getTelemetry } from "@/lib/pubg/client";
 import { parseTelemetry } from "@/lib/pubg/telemetry/parser";
 import { getMapMeta } from "@/lib/pubg/maps";
@@ -20,7 +21,7 @@ export async function MiniReplayMap({
   locale: Locale;
   match: MatchDetails;
   accountId?: string;
-  shard: string;
+  shard: Shard;
 }) {
   const t = await getTranslations({ locale, namespace: "match" });
 
@@ -56,6 +57,7 @@ export async function MiniReplayMap({
     }
   }
 
+  // Compact mode doesn't render tracers — keep payload light by stripping damages.
   const serialized: SerializableScene = {
     durationSec: scene.durationSec,
     mapName: scene.mapName,
@@ -64,6 +66,7 @@ export async function MiniReplayMap({
     knocks: scene.knocks,
     zones: scene.zones,
     carePackages: scene.carePackages,
+    damageHits: [],
     playerEntries: Array.from(scene.players.entries()),
   };
 
@@ -81,6 +84,7 @@ export async function MiniReplayMap({
       <ReplayShell
         scene={serialized}
         map={map}
+        shard={shard}
         defaultFocusId={focusId}
         autoPlay
         compact

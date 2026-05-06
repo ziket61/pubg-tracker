@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { MatchDetails } from "@/lib/pubg/types";
+import type { Shard } from "@/lib/pubg/shards";
 import { getTelemetry } from "@/lib/pubg/client";
 import { parseTelemetry } from "@/lib/pubg/telemetry/parser";
 import { buildDamageTimeline } from "@/lib/pubg/telemetry/damage-timeline";
@@ -8,6 +9,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard, StatGrid } from "@/components/ui/StatCard";
+import { PlayerLink } from "@/components/common/PlayerLink";
 import { getItemName } from "@/lib/assets/names";
 import { formatDuration } from "@/lib/format/duration";
 
@@ -15,10 +17,12 @@ export async function DamageTimeline({
   locale,
   match,
   accountId,
+  shard,
 }: {
   locale: Locale;
   match: MatchDetails;
   accountId: string;
+  shard: Shard;
 }) {
   const t = await getTranslations({ locale, namespace: "match" });
   const tc = await getTranslations({ locale, namespace: "common" });
@@ -88,7 +92,7 @@ export async function DamageTimeline({
             </span>
             <KindBadge kind={e.kind} t={t} />
             <span className="truncate">
-              <span className="text-fg">{e.other}</span>{" "}
+              <PlayerLink name={e.other} shard={shard} className="text-fg" />{" "}
               <span className="font-mono text-fg-subtle">{getItemName(e.weapon)}</span>
               {e.distance > 0 && (
                 <span className="ml-1 font-mono text-fg-subtle">

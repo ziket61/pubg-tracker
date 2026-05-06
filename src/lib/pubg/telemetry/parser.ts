@@ -199,6 +199,8 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
           damageReason: ev.damageReason ?? "unknown",
           damageCauserName: ev.damageCauserName ?? "unknown",
           distance: ev.distance ?? 0,
+          attackerLocation: ev.attacker?.location ? vec(ev.attacker.location) : null,
+          victimLocation: ev.victim?.location ? vec(ev.victim.location) : null,
         });
         break;
       }

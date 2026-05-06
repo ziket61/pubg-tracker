@@ -52,6 +52,10 @@ export interface DamageEvent {
   damageReason: string;
   damageCauserName: string;
   distance: number;
+  // Locations at the moment of damage (used for tracer animation in 2D replay).
+  // Optional because legacy fixtures may omit them.
+  attackerLocation?: Vec3 | null;
+  victimLocation?: Vec3 | null;
 }
 
 export interface CarePackageEvent {
