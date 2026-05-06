@@ -145,7 +145,18 @@
     "kindKnockTaken": "Knocked",
     "kindKill": "Kill",
     "kindDeath": "Death",
-    "showingFirstN": "Showing {count} of {total}"
+    "showingFirstN": "Showing {count} of {total}",
+    "routeMap": "Route map",
+    "routeMapDescription": "{name}'s route: landing, path, kills, death.",
+    "routeStart": "Start",
+    "routePath": "Path",
+    "routeKill": "Kill",
+    "routeDeath": "Death",
+    "carePackages": "Care packages",
+    "carePackage": "Drop",
+    "noDrops": "No drops in this match",
+    "nearbyKills": "Kills nearby: {n}",
+    "weaponBreakdown": "Weapon breakdown"
   },
   "replay": {
     "title": "2D replay",
@@ -162,7 +173,10 @@
     "legendDead": "Dead / disconnected",
     "legendKill": "Kill location",
     "legendSafeZone": "Safe zone",
-    "legendBlueZone": "Blue zone"
+    "legendBlueZone": "Blue zone",
+    "heat_off": "Heatmap off",
+    "heat_kills": "Heat: kills",
+    "heat_landings": "Heat: landings"
   },
   "mastery": {
     "title": "Mastery",

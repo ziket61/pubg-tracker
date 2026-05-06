@@ -145,7 +145,18 @@
     "kindKnockTaken": "Был нокнут",
     "kindKill": "Кил",
     "kindDeath": "Смерть",
-    "showingFirstN": "Показано {count} из {total}"
+    "showingFirstN": "Показано {count} из {total}",
+    "routeMap": "Маршрут на карте",
+    "routeMapDescription": "Маршрут игрока {name}: место приземления, путь, киллы, точка смерти.",
+    "routeStart": "Старт",
+    "routePath": "Путь",
+    "routeKill": "Убийство",
+    "routeDeath": "Смерть",
+    "carePackages": "Дропы (care packages)",
+    "carePackage": "Дроп",
+    "noDrops": "Дропов в этом матче не было",
+    "nearbyKills": "Рядом убийств: {n}",
+    "weaponBreakdown": "По оружию"
   },
   "replay": {
     "title": "2D replay",
@@ -162,7 +173,10 @@
     "legendDead": "Мёртвый / отключённый",
     "legendKill": "Место убийства",
     "legendSafeZone": "Белый круг (зона)",
-    "legendBlueZone": "Газовая зона"
+    "legendBlueZone": "Газовая зона",
+    "heat_off": "Heatmap off",
+    "heat_kills": "Heat: убийства",
+    "heat_landings": "Heat: посадки"
   },
   "mastery": {
     "title": "Мастерство",

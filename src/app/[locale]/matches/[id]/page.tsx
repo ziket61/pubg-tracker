@@ -13,6 +13,9 @@ import { MatchHighlights } from "@/components/match/MatchHighlights";
 import { KillTree } from "@/components/match/KillTree";
 import { DeathAnalysis } from "@/components/match/DeathAnalysis";
 import { DamageTimeline } from "@/components/match/DamageTimeline";
+import { PlayerRouteMap } from "@/components/match/PlayerRouteMap";
+import { WeaponBreakdown } from "@/components/match/WeaponBreakdown";
+import { CarePackageTracker } from "@/components/match/CarePackageTracker";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ExternalLinks } from "@/components/common/ExternalLinks";
@@ -105,6 +108,36 @@ export default async function MatchPage({
                 accountId={focusParticipant.stats.playerId}
               />
             </Suspense>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <Suspense
+                fallback={
+                  <Card>
+                    <CardHeader title={t("routeMap")} />
+                    <Skeleton className="h-72 w-full" />
+                  </Card>
+                }
+              >
+                <PlayerRouteMap
+                  locale={locale}
+                  match={match}
+                  accountId={focusParticipant.stats.playerId}
+                />
+              </Suspense>
+              <Suspense
+                fallback={
+                  <Card>
+                    <CardHeader title={t("weaponBreakdown")} />
+                    <Skeleton className="h-72 w-full" />
+                  </Card>
+                }
+              >
+                <WeaponBreakdown
+                  locale={locale}
+                  match={match}
+                  accountId={focusParticipant.stats.playerId}
+                />
+              </Suspense>
+            </div>
             <Suspense
               fallback={
                 <Card>
@@ -132,6 +165,17 @@ export default async function MatchPage({
         }
       >
         <KillTree locale={locale} match={match} />
+      </Suspense>
+
+      <Suspense
+        fallback={
+          <Card>
+            <CardHeader title={t("carePackages")} />
+            <Skeleton className="h-72 w-full" />
+          </Card>
+        }
+      >
+        <CarePackageTracker locale={locale} match={match} />
       </Suspense>
 
       <Card>

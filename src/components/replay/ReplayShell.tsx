@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { PlayerRef, TelemetryScene } from "@/lib/pubg/telemetry/types";
 import { snapshotAt, trailFor, zoneAt } from "@/lib/pubg/telemetry/timeline";
 import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
+import { killHeat, landingHeat, type HeatBucket } from "@/lib/pubg/telemetry/heatmap";
 import type { MapMeta } from "@/lib/pubg/maps";
 import { MapCanvas } from "./MapCanvas";
 
@@ -77,6 +78,12 @@ export function ReplayShell({
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
   const [showKills, setShowKills] = useState(true);
+  const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
+
+  // Pre-compute heatmap buckets — they don't depend on `time`.
+  const killHeatBuckets = useMemo<HeatBucket[]>(() => killHeat(scene, map.maxCm), [scene, map]);
+  const landingHeatBuckets = useMemo<HeatBucket[]>(() => landingHeat(scene, map.maxCm), [scene, map]);
+  const activeHeat = heatMode === "kills" ? killHeatBuckets : heatMode === "landings" ? landingHeatBuckets : [];
 
   // Smooth playback via requestAnimationFrame
   const lastTickRef = useRef<number | null>(null);
@@ -128,6 +135,17 @@ export function ReplayShell({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div>
         <MapCanvas map={map} size={CANVAS_SIZE}>
+          {/* Heatmap layer (rendered first so it sits behind everything else) */}
+          {activeHeat.map((b, i) => (
+            <circle
+              key={`heat-${i}`}
+              cx={b.x * CANVAS_SIZE}
+              cy={b.y * CANVAS_SIZE}
+              r={CANVAS_SIZE / 36}
+              fill={heatMode === "kills" ? "#ef4444" : "#38bdf8"}
+              opacity={Math.max(0.08, b.count * 0.5)}
+            />
+          ))}
           {zone?.safetyZonePosition && zone.safetyZoneRadius && (
             <ZoneCircle
               cx={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
@@ -271,6 +289,26 @@ export function ReplayShell({
             <Toggle checked={showTrails} onChange={setShowTrails} label={t("trails")} />
             <Toggle checked={showZone} onChange={setShowZone} label={t("zone")} />
             <Toggle checked={showKills} onChange={setShowKills} label={t("kills")} />
+            <span className="ml-auto inline-flex items-center gap-1 rounded border border-border bg-bg-muted p-0.5">
+              {(["off", "kills", "landings"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setHeatMode(m)}
+                  className={`rounded px-2 py-0.5 transition-colors ${
+                    heatMode === m
+                      ? m === "kills"
+                        ? "bg-combat/20 text-combat"
+                        : m === "landings"
+                        ? "bg-accent/20 text-accent"
+                        : "bg-bg text-fg"
+                      : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  {t(`heat_${m}`)}
+                </button>
+              ))}
+            </span>
           </div>
         </div>
       </div>
