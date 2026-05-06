@@ -11,10 +11,12 @@ import { RecentMatches } from "@/components/player/RecentMatches";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-// Cap at 10 — matches the in-process rate-limit bucket capacity (10 RPM).
-// Going higher would queue requests, where each queued entry waits up to 60s
-// for refill — easily blowing past Vercel's serverless function time limit.
-const MAX_MATCHES = 10;
+// Cap at 6 — leaves headroom under the 10 RPM rate-limit bucket so a few
+// concurrent requests (player search, this page, stale revalidations) never
+// exhaust tokens and force a 60s queue wait that would blow past Vercel's
+// serverless function timeout. The user's complaint #14 ("matches либо не
+// работают, либо очень долго грузят") was traced to that exhaustion.
+const MAX_MATCHES = 6;
 
 export default async function PlayerMatchesPage({
   params,

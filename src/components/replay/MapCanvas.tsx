@@ -72,12 +72,13 @@ export function MapCanvas({
           })}
         </g>
 
-        {/* compass hint */}
-        <g transform={`translate(${size - 36}, ${size - 36})`}>
-          <circle r="22" fill="rgba(8,9,12,0.7)" stroke="rgba(243,165,54,0.4)" />
-          <text fontFamily="var(--font-mono)" fontSize="10" fill="#f3a536" textAnchor="middle" y="-6">N</text>
-          <line x1="0" y1="-14" x2="0" y2="14" stroke="rgba(243,165,54,0.4)" strokeWidth="1" />
-          <line x1="-14" y1="0" x2="14" y2="0" stroke="rgba(243,165,54,0.4)" strokeWidth="1" />
+        {/* Compass hint — small north arrow only, sits in the corner so it
+            doesn't eat visible map area. Keeps the map name overlay company. */}
+        <g transform={`translate(${size - 18}, ${size - 18})`}>
+          <path d="M 0 -8 L 4 6 L 0 3 L -4 6 Z" fill="#f3a536" stroke="rgba(8,9,12,0.7)" strokeWidth="0.8" />
+          <text fontFamily="var(--font-mono)" fontSize="7" fill="#f3a536" textAnchor="middle" y="-9.5"
+            style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.7)", strokeWidth: 2 } as React.CSSProperties}
+          >N</text>
         </g>
       </svg>
 
