@@ -67,12 +67,27 @@ else
 fi
 
 if [ -z "$VERCEL" ]; then
-  echo "ERROR: vercel CLI not found. Tried:" >&2
-  for cand in "${CANDIDATES[@]}"; do
-    echo "  - $cand" >&2
-  done
-  echo "Install via: npm i -g vercel" >&2
-  exit 1
+  echo ">>> vercel CLI not found, attempting auto-install via npm i -g vercel..." >&2
+  if ! npm i -g vercel >&2; then
+    echo "ERROR: auto-install failed. Run \`npm i -g vercel\` manually." >&2
+    exit 1
+  fi
+  # Re-scan candidates after install.
+  if command -v vercel >/dev/null 2>&1; then
+    VERCEL="vercel"
+  else
+    NPM_PREFIX_RAW=$(npm config get prefix 2>/dev/null | tr -d '\r')
+    NPM_PREFIX_BASH=$(echo "$NPM_PREFIX_RAW" | sed -E 's|^([A-Za-z]):|/\L\1|; s|\\|/|g')
+    if [ -f "$NPM_PREFIX_BASH/vercel.cmd" ]; then
+      VERCEL="$NPM_PREFIX_BASH/vercel.cmd"
+    elif [ -f "$NPM_PREFIX_BASH/vercel" ]; then
+      VERCEL="$NPM_PREFIX_BASH/vercel"
+    fi
+  fi
+  if [ -z "$VERCEL" ]; then
+    echo "ERROR: vercel installed but binary still not found. Try restarting your shell." >&2
+    exit 1
+  fi
 fi
 
 # Wrapper alias so the rest of the script just calls $VERCEL.
