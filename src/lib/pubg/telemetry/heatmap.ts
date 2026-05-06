@@ -42,6 +42,30 @@ export function killHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
   );
 }
 
+export function damageHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
+  // Where firefights happen — use damages with both attacker AND victim
+  // location, biased toward heavier hits to avoid noise from chip damage.
+  return bucketize(
+    scene.damages
+      .filter((d) => d.damage >= 20 && d.victimLocation)
+      .map((d) => ({ x: d.victimLocation!.x, y: d.victimLocation!.y })),
+    maxCm,
+  );
+}
+
+export function knockHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
+  // Knockdown locations — every LogPlayerMakeGroggy. Useful to see contested
+  // areas without the survivorship bias of kill-only heat (some downs are
+  // revived, some don't escalate to a kill).
+  const points: Array<{ x: number; y: number }> = [];
+  for (const k of scene.knocks) {
+    if (k.victim.location) {
+      points.push({ x: k.victim.location.x, y: k.victim.location.y });
+    }
+  }
+  return bucketize(points, maxCm);
+}
+
 export function landingHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
   // Prefer the explicit `LogParachuteLanding` event when telemetry has it.
   // Without it, "first position" sits on the plane's flight path, not where
