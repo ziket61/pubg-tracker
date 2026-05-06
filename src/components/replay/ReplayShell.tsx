@@ -358,16 +358,20 @@ export function ReplayShell({
     }
   }, [zoom]);
 
-  // Mouse-drag panning while zoomed in. The drag is tracked in CSS pixels
-  // and applied as a `translate(...)` before the scale transform.
+  // Pan-drag while zoomed. We use Pointer Events with setPointerCapture
+  // instead of window-level mouse listeners — the previous round-2 setup
+  // had a bug where the drag got "stuck" if mouseup fired while the cursor
+  // was outside the browser viewport. Pointer capture guarantees we hear
+  // pointerup / pointercancel even when the cursor leaves the element.
   const mapWrapRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const dragRef = useRef<
+    { startX: number; startY: number; panX: number; panY: number; pointerId: number } | null
+  >(null);
   const [isDragging, setIsDragging] = useState(false);
 
   // Track the on-screen size of the map container so we can clamp the pan
   // offset — without clamping, dragging at 2× could push the map clean off
-  // the canvas and reveal the page background, which is what the user saw
-  // in screenshot 2.
+  // the canvas and reveal the page background.
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = mapWrapRef.current;
@@ -381,9 +385,6 @@ export function ReplayShell({
 
   const clampPan = useCallback(
     (px: number, py: number) => {
-      // With `transform-origin: 50% 50%` and `scale(zoom)`, the inner box
-      // grows symmetrically around the center. Translating beyond
-      // `(size * (zoom - 1)) / 2` pulls the opposite edge into view.
       const maxX = Math.max(0, (containerSize.w * (zoom - 1)) / 2);
       const maxY = Math.max(0, (containerSize.h * (zoom - 1)) / 2);
       return {
@@ -394,36 +395,38 @@ export function ReplayShell({
     [containerSize, zoom],
   );
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      // Only pan when zoomed in. When zoom = 1, native click bubble keeps
-      // working (player markers, etc).
-      if (zoom <= 1) return;
-      if (e.button !== 0) return;
-      dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (zoom <= 1 || e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+        pointerId: e.pointerId,
+      };
       setIsDragging(true);
     },
     [zoom, pan],
   );
 
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMove = (e: MouseEvent) => {
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       const d = dragRef.current;
-      if (!d) return;
-      setPan(clampPan(d.panX + (e.clientX - d.x), d.panY + (e.clientY - d.y)));
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      setIsDragging(false);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [isDragging, clampPan]);
+      if (!d || d.pointerId !== e.pointerId) return;
+      setPan(clampPan(d.panX + (e.clientX - d.startX), d.panY + (e.clientY - d.startY)));
+    },
+    [clampPan],
+  );
+
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    dragRef.current = null;
+    setIsDragging(false);
+  }, []);
 
   // When zoom shrinks (e.g. user clicks "1.0×" reset), re-clamp the existing
   // pan so we don't end up with a stale offset that's now out of bounds.
@@ -756,11 +759,19 @@ export function ReplayShell({
   // Map block + side overlays (fullscreen toggle + killfeed).
   const mapWithOverlays = (
     <div ref={mapWrapRef} className="relative h-full w-full">
-      {/* Zoom container — outer box stays fixed-size, inner is scaled + translated for pan. */}
+      {/* Zoom container — outer box stays fixed-size, inner is scaled +
+          translated for pan. Pointer events with setPointerCapture keep
+          the drag glued to the cursor even when it leaves the map area. */}
       <div
         className="overflow-hidden rounded-2xl"
-        style={{ cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default" }}
-        onMouseDown={onMouseDown}
+        style={{
+          cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default",
+          touchAction: zoom > 1 ? "none" : "auto",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
         <div
           className="transition-transform duration-150 ease-out"
@@ -1245,40 +1256,50 @@ function MarkerTooltip({
 
 /**
  * Inline weapon badge — small icon + tiny shorthand. Falls back to a text
- * label when we don't have an icon mapping. Used in the on-map killfeed
- * (per user feedback #12 to switch from text to icons à la pubg.sh).
+ * label when we don't have an icon mapping OR when the image 404s (some
+ * weapon ids don't have an asset in pubg/api-assets, especially newer
+ * ones). The onError handler swaps the <img> for a text span on any
+ * load failure so the killfeed never shows a broken-image glyph.
  */
 function WeaponBadge({ id }: { id: string }) {
+  const [broken, setBroken] = useState(false);
   const src = id ? getItemIcon(id) : null;
-  if (src) {
+  if (src && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={getItemName(id)}
         title={getItemName(id)}
-        width={20}
+        width={22}
         height={14}
-        className="h-3.5 w-5 rounded-sm bg-bg-subtle/40 object-contain"
+        className="h-3.5 w-[22px] rounded-sm bg-bg-subtle/40 object-contain"
         loading="lazy"
+        onError={() => setBroken(true)}
       />
     );
   }
-  return <span className="rounded bg-bg-subtle/60 px-1 text-[9px] text-fg-subtle">{getItemName(id)}</span>;
+  return (
+    <span className="rounded bg-bg-subtle/60 px-1 text-[9px] text-fg-subtle">
+      {getItemName(id)}
+    </span>
+  );
 }
 
 function WeaponIconInline({ id }: { id: string }) {
+  const [broken, setBroken] = useState(false);
   const src = id ? getItemIcon(id) : null;
-  if (!src) return null;
+  if (!src || broken) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt=""
-      width={18}
+      width={20}
       height={12}
-      className="h-3 w-4 rounded-sm bg-bg-subtle/40 object-contain"
+      className="h-3 w-5 rounded-sm bg-bg-subtle/40 object-contain"
       loading="lazy"
+      onError={() => setBroken(true)}
     />
   );
 }
@@ -1458,14 +1479,28 @@ function KillfeedHistory({
 
 function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "play" | "blue" | "red" }) {
   // play = current play zone outline drawn WHITE (the white circle from the
-  //        in-game minimap — where players are safe right now).
-  // blue = the next-zone target boundary drawn BLUE (where the white circle
-  //        will move to when the timer expires).
-  // red  = the bombardment zone — dashed so it reads as a temporary hazard.
-  const stroke =
-    tone === "play" ? "#ffffff" : tone === "blue" ? "#38bdf8" : "#ef4444";
-  const fill =
-    tone === "play" ? 0.06 : tone === "blue" ? 0.07 : 0.08;
+  //        in-game minimap — where players are safe right now). Tint INSIDE.
+  // blue = the next-zone target drawn BLUE. The blue zone (gas) lives
+  //        OUTSIDE the circle, so we use an inverse-fill path (rect minus
+  //        circle, even-odd rule) to tint the area BEYOND the boundary.
+  // red  = bombardment zone — dashed, tint INSIDE.
+  // Strokes were 1.4–1.5 px; per user feedback round-4 trim to 1 px (≈ −1/3).
+  if (tone === "blue") {
+    return (
+      <g>
+        <path
+          d={`M 0,0 L ${CANVAS_SIZE},0 L ${CANVAS_SIZE},${CANVAS_SIZE} L 0,${CANVAS_SIZE} Z M ${cx + r},${cy} A ${r},${r} 0 1,0 ${cx - r},${cy} A ${r},${r} 0 1,0 ${cx + r},${cy} Z`}
+          fill="#38bdf8"
+          opacity="0.10"
+          fillRule="evenodd"
+          pointerEvents="none"
+        />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#38bdf8" strokeWidth="1" opacity="0.85" />
+      </g>
+    );
+  }
+  const stroke = tone === "play" ? "#ffffff" : "#ef4444";
+  const fillOpacity = tone === "play" ? 0.06 : 0.08;
   return (
     <g>
       <circle
@@ -1474,11 +1509,11 @@ function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; to
         r={r}
         fill="none"
         stroke={stroke}
-        strokeWidth={tone === "play" ? 1.4 : 1.5}
+        strokeWidth={1}
         strokeDasharray={tone === "red" ? "4 3" : undefined}
         opacity={tone === "play" ? 0.95 : 0.85}
       />
-      <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={fill} />
+      <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={fillOpacity} />
     </g>
   );
 }
