@@ -9,7 +9,12 @@
     "demoMode": "Демо-режим — данные из локальных фикстур",
     "notFound": "Не найдено",
     "noData": "Нет данных",
-    "of": "из"
+    "of": "из",
+    "copy": "Скопировать",
+    "copied": "Скопировано",
+    "copyLink": "Скопировать ссылку",
+    "unknown": "—",
+    "players": "игроков"
   },
   "nav": {
     "home": "Главная",
@@ -60,7 +65,15 @@
       "mastery": "Мастерство"
     },
     "noMatches": "Свежих матчей не найдено",
-    "lastMatches": "Последние матчи"
+    "lastMatches": "Последние матчи",
+    "recentFormTitle": "Форма последних матчей",
+    "avgPerMatch": "в среднем за матч",
+    "avgPlace": "Среднее место",
+    "avgSurvival": "Среднее выживание",
+    "bestPlaceShort": "лучшее: #{place}",
+    "placementStrip": "Хронология мест",
+    "bestMatch": "Лучший матч",
+    "openMatch": "Открыть матч"
   },
   "stats": {
     "kills": "Убийств",
@@ -103,7 +116,35 @@
     "topKills": "Лидер по килам",
     "viewProfile": "Профиль",
     "telemetry": "Телеметрия",
-    "telemetryUnavailable": "Телеметрия недоступна"
+    "telemetryUnavailable": "Телеметрия недоступна",
+    "killTree": "Хроника боёв",
+    "team": "Команда",
+    "eliminations": "выбытий",
+    "knockedShort": "ноkнул →",
+    "knocked": "Был нокнут",
+    "deathAnalysis": "Как я умер",
+    "killedBy": "Убил",
+    "survived": "Прожил",
+    "totalDamageTaken": "Получено урона всего",
+    "damageLeadup": "Последние полученные удары",
+    "openReplay": "Открыть 2D replay"
+  },
+  "replay": {
+    "title": "2D replay",
+    "play": "Старт",
+    "pause": "Пауза",
+    "restart": "В начало",
+    "trails": "След",
+    "zone": "Зона",
+    "kills": "Убийства",
+    "focusPlayer": "Фокус на игроке",
+    "none": "никого",
+    "legend": "Легенда",
+    "legendPlayer": "Живой игрок",
+    "legendDead": "Мёртвый / отключённый",
+    "legendKill": "Место убийства",
+    "legendSafeZone": "Белый круг (зона)",
+    "legendBlueZone": "Газовая зона"
   },
   "mastery": {
     "title": "Мастерство",

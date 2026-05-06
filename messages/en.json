@@ -9,7 +9,12 @@
     "demoMode": "Demo mode — using local fixtures",
     "notFound": "Not found",
     "noData": "No data",
-    "of": "of"
+    "of": "of",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyLink": "Copy link",
+    "unknown": "—",
+    "players": "players"
   },
   "nav": {
     "home": "Home",
@@ -60,7 +65,15 @@
       "mastery": "Mastery"
     },
     "noMatches": "No recent matches found",
-    "lastMatches": "Recent matches"
+    "lastMatches": "Recent matches",
+    "recentFormTitle": "Recent form",
+    "avgPerMatch": "per match",
+    "avgPlace": "Avg placement",
+    "avgSurvival": "Avg survival",
+    "bestPlaceShort": "best: #{place}",
+    "placementStrip": "Placement timeline",
+    "bestMatch": "Best match",
+    "openMatch": "Open match"
   },
   "stats": {
     "kills": "Kills",
@@ -103,7 +116,35 @@
     "topKills": "Top kills",
     "viewProfile": "Profile",
     "telemetry": "Telemetry",
-    "telemetryUnavailable": "Telemetry unavailable"
+    "telemetryUnavailable": "Telemetry unavailable",
+    "killTree": "Kill flow",
+    "team": "Team",
+    "eliminations": "eliminations",
+    "knockedShort": "knocked →",
+    "knocked": "Knocked by",
+    "deathAnalysis": "How I died",
+    "killedBy": "Killed by",
+    "survived": "Survived",
+    "totalDamageTaken": "Total damage taken",
+    "damageLeadup": "Damage taken before death",
+    "openReplay": "Open 2D replay"
+  },
+  "replay": {
+    "title": "2D replay",
+    "play": "Play",
+    "pause": "Pause",
+    "restart": "Restart",
+    "trails": "Trails",
+    "zone": "Zone",
+    "kills": "Kills",
+    "focusPlayer": "Focus player",
+    "none": "none",
+    "legend": "Legend",
+    "legendPlayer": "Alive player",
+    "legendDead": "Dead / disconnected",
+    "legendKill": "Kill location",
+    "legendSafeZone": "Safe zone",
+    "legendBlueZone": "Blue zone"
   },
   "mastery": {
     "title": "Mastery",
