@@ -21,6 +21,7 @@ set -e
 
 REPO_NAME="${REPO_NAME:-pubg-tracker}"
 GH="/c/Program Files/GitHub CLI/gh.exe"
+VERCEL=""
 
 # ---------- step 1: tooling + auth checks ----------
 
@@ -33,10 +34,23 @@ if [ ! -x "$GH" ]; then
   fi
 fi
 
-if ! command -v vercel >/dev/null 2>&1; then
+# Locate vercel CLI. On Git Bash + Windows, npm globals live in AppData/Roaming/npm
+# but that's not on the bash PATH by default — fall back to the npm-known location.
+if command -v vercel >/dev/null 2>&1; then
+  VERCEL="vercel"
+elif [ -x "$APPDATA/npm/vercel.cmd" ]; then
+  VERCEL="$APPDATA/npm/vercel.cmd"
+elif [ -x "/c/Users/$USERNAME/AppData/Roaming/npm/vercel.cmd" ]; then
+  VERCEL="/c/Users/$USERNAME/AppData/Roaming/npm/vercel.cmd"
+elif [ -x "$HOME/AppData/Roaming/npm/vercel.cmd" ]; then
+  VERCEL="$HOME/AppData/Roaming/npm/vercel.cmd"
+else
   echo "ERROR: vercel CLI not found. Install via: npm i -g vercel" >&2
   exit 1
 fi
+
+# Wrapper alias so the rest of the script just calls $VERCEL.
+vercel() { "$VERCEL" "$@"; }
 
 if ! "$GH" auth status >/dev/null 2>&1; then
   echo "ERROR: gh CLI not authenticated. Run: \"$GH\" auth login --web" >&2
