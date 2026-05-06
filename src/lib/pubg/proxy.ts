@@ -85,17 +85,24 @@ export async function proxyPubgRequest(
   const url = new URL(BASE + path);
   for (const [k, v] of query.entries()) url.searchParams.set(k, v);
 
+  // Hard cap per upstream call — PUBG occasionally stalls on cold matches.
+  // 8s is generous for normal latency (~200-800ms) and bounds the worst case.
+  const PER_REQUEST_TIMEOUT_MS = 8000;
+
   try {
-    const response = await withRateLimit(() =>
-      fetch(url.toString(), {
+    const response = await withRateLimit(() => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), PER_REQUEST_TIMEOUT_MS);
+      return fetch(url.toString(), {
         method: "GET",
         headers: {
           Authorization: `Bearer ${env.PUBG_API_KEY}`,
           Accept: "application/vnd.api+json",
         },
         next: { revalidate: cfg.revalidate, tags: cfg.tags(path, query) },
-      }),
-    );
+        signal: ctrl.signal,
+      }).finally(() => clearTimeout(timer));
+    });
 
     const text = await response.text();
     const body = text ? safeJson(text) : null;

@@ -1,27 +1,23 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
-import { getMatch } from "@/lib/pubg/client";
 import type { Shard } from "@/lib/pubg/shards";
+import { getPlayerRecentMatches, type MatchWithMaybeStats } from "@/lib/pubg/recent-data";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Link } from "@/lib/i18n/navigation";
 import { MatchRow } from "./MatchRow";
 
-export async function RecentMatches({
-  locale,
-  shard,
-  accountId,
-  matchIds,
-  limit = 6,
-  showAll,
-}: {
+export async function RecentMatches(props: {
   locale: Locale;
   shard: Shard;
   accountId: string;
   matchIds: string[];
   limit?: number;
   showAll?: boolean;
+  preloaded?: MatchWithMaybeStats[];
 }) {
+  const { locale, shard, accountId, matchIds, showAll } = props;
+  const limit = props.limit ?? 6;
   const t = await getTranslations({ locale, namespace: "player" });
   const tc = await getTranslations({ locale, namespace: "common" });
 
@@ -34,13 +30,9 @@ export async function RecentMatches({
     );
   }
 
-  const ids = matchIds.slice(0, limit);
-
-  // Fetch matches in parallel — proxy already throttles via the rate-limit guard.
-  const settled = await Promise.allSettled(ids.map((id) => getMatch(shard, id)));
-  const matches = settled
-    .map((r) => (r.status === "fulfilled" ? r.value : null))
-    .filter((m): m is NonNullable<typeof m> => m !== null);
+  const data: MatchWithMaybeStats[] = props.preloaded
+    ? props.preloaded.slice(0, limit)
+    : await getPlayerRecentMatches(shard, accountId, matchIds, limit);
 
   return (
     <Card>
@@ -57,24 +49,19 @@ export async function RecentMatches({
           ) : null
         }
       />
-      {matches.length === 0 ? (
+      {data.length === 0 ? (
         <EmptyState title={t("noMatches")} />
       ) : (
         <ul className="space-y-2">
-          {matches.map((m) => {
-            const participant = m.participants.find(
-              (p) => p.stats.playerId === accountId,
-            );
-            return (
-              <li key={m.id}>
-                <MatchRow
-                  locale={locale}
-                  match={m}
-                  participantStats={participant?.stats ?? null}
-                />
-              </li>
-            );
-          })}
+          {data.map((d) => (
+            <li key={d.match.id}>
+              <MatchRow
+                locale={locale}
+                match={d.match}
+                participantStats={d.stats}
+              />
+            </li>
+          ))}
         </ul>
       )}
     </Card>

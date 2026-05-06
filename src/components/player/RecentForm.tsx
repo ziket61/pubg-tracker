@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { Shard } from "@/lib/pubg/shards";
-import { getMatch } from "@/lib/pubg/client";
+import type { MatchWithMaybeStats } from "@/lib/pubg/recent-data";
+import { getPlayerRecentMatches } from "@/lib/pubg/recent-data";
 import { aggregateForm, pickBestMatch, type MatchWithStats } from "@/lib/pubg/form";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StatCard, StatGrid } from "@/components/ui/StatCard";
@@ -13,42 +14,30 @@ import { Link } from "@/lib/i18n/navigation";
 
 const DEFAULT_LIMIT = 5;
 
-export async function RecentForm({
-  locale,
-  shard,
-  accountId,
-  matchIds,
-  limit = DEFAULT_LIMIT,
-}: {
+export async function RecentForm(props: {
   locale: Locale;
   shard: Shard;
   accountId: string;
-  matchIds: string[];
+  matchIds?: string[];
   limit?: number;
+  // Optional: pre-fetched data (avoid duplicate API calls when the page already has it)
+  preloaded?: MatchWithMaybeStats[];
 }) {
+  const { locale, accountId } = props;
   const t = await getTranslations({ locale, namespace: "player" });
   const tStats = await getTranslations({ locale, namespace: "stats" });
   const tc = await getTranslations({ locale, namespace: "common" });
 
-  if (!matchIds.length) {
-    return (
-      <Card variant="raised">
-        <CardHeader title={t("recentFormTitle")} accent="brand" />
-        <EmptyState title={t("noMatches")} />
-      </Card>
-    );
-  }
+  const limit = props.limit ?? DEFAULT_LIMIT;
+  const totalAvailable = props.matchIds?.length ?? props.preloaded?.length ?? 0;
 
-  const ids = matchIds.slice(0, limit);
-  const settled = await Promise.allSettled(ids.map((id) => getMatch(shard, id)));
-  const items: MatchWithStats[] = [];
-  for (const r of settled) {
-    if (r.status !== "fulfilled") continue;
-    const m = r.value;
-    const p = m.participants.find((pp) => pp.stats.playerId === accountId);
-    if (!p) continue;
-    items.push({ match: m, stats: p.stats });
-  }
+  const data: MatchWithMaybeStats[] = props.preloaded
+    ? props.preloaded.slice(0, limit)
+    : await getPlayerRecentMatches(props.shard, accountId, props.matchIds ?? [], limit);
+
+  const items: MatchWithStats[] = data
+    .filter((d): d is MatchWithMaybeStats & { stats: NonNullable<MatchWithMaybeStats["stats"]> } => d.stats !== null)
+    .map((d) => ({ match: d.match, stats: d.stats }));
 
   if (!items.length) {
     return (
@@ -71,7 +60,7 @@ export async function RecentForm({
         accent="brand"
         right={
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
-            {form.matchCount} / {matchIds.length} {tc("of")} {matchIds.length}
+            {form.matchCount} {tc("of")} {Math.max(totalAvailable, form.matchCount)}
           </span>
         }
       />
@@ -134,7 +123,6 @@ export async function RecentForm({
         </div>
       </div>
 
-      {/* Best match teaser inline */}
       <BestMatchTeaser items={items} locale={locale} />
     </Card>
   );

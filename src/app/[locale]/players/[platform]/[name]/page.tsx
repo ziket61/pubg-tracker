@@ -5,6 +5,7 @@ import { setRequestLocale } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import { isShard } from "@/lib/pubg/shards";
 import { searchPlayersByName } from "@/lib/pubg/client";
+import { getPlayerRecentMatches } from "@/lib/pubg/recent-data";
 import { NotFoundError } from "@/lib/pubg/errors";
 import { PlayerHeader } from "@/components/player/PlayerHeader";
 import { LifetimeStats } from "@/components/player/LifetimeStats";
@@ -12,10 +13,12 @@ import { SeasonStatsPanel } from "@/components/player/SeasonStatsPanel";
 import { RecentMatches } from "@/components/player/RecentMatches";
 import { RecentForm } from "@/components/player/RecentForm";
 import { PlayerTabs } from "@/components/player/PlayerTabs";
-import { Skeleton, StatGridSkeleton } from "@/components/ui/Skeleton";
+import { StatGridSkeleton } from "@/components/ui/Skeleton";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { ExternalLinks } from "@/components/common/ExternalLinks";
 import { ownPlayerUrl, pubgReportLinks } from "@/lib/external-links";
+
+const RECENT_MATCH_FETCH_LIMIT = 6;
 
 export default async function PlayerOverviewPage({
   params,
@@ -41,7 +44,6 @@ export default async function PlayerOverviewPage({
     throw err;
   }
 
-  // Build absolute profile URL for the copy button.
   const hdrs = await headers();
   const proto = hdrs.get("x-forwarded-proto") ?? "http";
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
@@ -69,7 +71,7 @@ export default async function PlayerOverviewPage({
           </Card>
         }
       >
-        <RecentForm
+        <RecentMatchesAndForm
           locale={locale}
           shard={platform}
           accountId={player.id}
@@ -104,22 +106,45 @@ export default async function PlayerOverviewPage({
           modeParam={mode}
         />
       </Suspense>
+    </div>
+  );
+}
 
-      <Suspense
-        fallback={
-          <Card>
-            <CardHeader title="…" />
-            <Skeleton className="h-64 w-full" />
-          </Card>
-        }
-      >
-        <RecentMatches
-          locale={locale}
-          shard={platform}
-          accountId={player.id}
-          matchIds={player.matchIds}
-        />
-      </Suspense>
+/**
+ * Fetches the recent matches once (with the player's stats attached) and renders
+ * BOTH RecentForm and RecentMatches with the same data — saves N redundant
+ * upstream calls when both components want overlapping match details.
+ */
+async function RecentMatchesAndForm({
+  locale,
+  shard,
+  accountId,
+  matchIds,
+}: {
+  locale: Locale;
+  shard: import("@/lib/pubg/shards").Shard;
+  accountId: string;
+  matchIds: string[];
+}) {
+  const data = await getPlayerRecentMatches(shard, accountId, matchIds, RECENT_MATCH_FETCH_LIMIT);
+  return (
+    <div className="space-y-5">
+      <RecentForm
+        locale={locale}
+        shard={shard}
+        accountId={accountId}
+        matchIds={matchIds}
+        preloaded={data}
+        limit={5}
+      />
+      <RecentMatches
+        locale={locale}
+        shard={shard}
+        accountId={accountId}
+        matchIds={matchIds}
+        preloaded={data}
+        limit={6}
+      />
     </div>
   );
 }
