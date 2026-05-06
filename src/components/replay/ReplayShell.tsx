@@ -13,7 +13,13 @@ import type {
 } from "@/lib/pubg/telemetry/types";
 import { snapshotAt, trailFor, zoneAt } from "@/lib/pubg/telemetry/timeline";
 import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
-import { killHeat, landingHeat, type HeatBucket } from "@/lib/pubg/telemetry/heatmap";
+import {
+  killHeat,
+  knockHeat,
+  damageHeat,
+  landingHeat,
+  type HeatBucket,
+} from "@/lib/pubg/telemetry/heatmap";
 import type { MapMeta } from "@/lib/pubg/maps";
 import type { Shard } from "@/lib/pubg/shards";
 import { getItemName } from "@/lib/assets/names";
@@ -116,14 +122,14 @@ export function ReplayShell({
 
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(autoPlay);
-  const [speed, setSpeed] = useState(compact ? 8 : 2);
+  const [speed, setSpeed] = useState(compact ? 8 : 1);
   const [focusId, setFocusId] = useState<string | null>(defaultFocusId ?? null);
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
   const [showKills, setShowKills] = useState(true);
   const [showDrops, setShowDrops] = useState(true);
   const [showTracers, setShowTracers] = useState(true);
-  const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
+  const [heatMode, setHeatMode] = useState<"off" | "kills" | "damage" | "knocks" | "landings">("off");
   const [hoverId, setHoverId] = useState<string | null>(null);
   // Continuous zoom (1.0 .. 5.0) and pan offset (px, applied as translate).
   // Pan is reset whenever zoom drops back to 1×.
@@ -150,8 +156,29 @@ export function ReplayShell({
 
   // Pre-compute heatmap buckets — they don't depend on `time`.
   const killHeatBuckets = useMemo<HeatBucket[]>(() => killHeat(scene, map.maxCm), [scene, map]);
+  const damageHeatBuckets = useMemo<HeatBucket[]>(() => damageHeat(scene, map.maxCm), [scene, map]);
+  const knockHeatBuckets = useMemo<HeatBucket[]>(() => knockHeat(scene, map.maxCm), [scene, map]);
   const landingHeatBuckets = useMemo<HeatBucket[]>(() => landingHeat(scene, map.maxCm), [scene, map]);
-  const activeHeat = heatMode === "kills" ? killHeatBuckets : heatMode === "landings" ? landingHeatBuckets : [];
+  const activeHeat =
+    heatMode === "kills"
+      ? killHeatBuckets
+      : heatMode === "damage"
+      ? damageHeatBuckets
+      : heatMode === "knocks"
+      ? knockHeatBuckets
+      : heatMode === "landings"
+      ? landingHeatBuckets
+      : [];
+  const heatColor =
+    heatMode === "kills"
+      ? "#ef4444"
+      : heatMode === "damage"
+      ? "#fb923c"
+      : heatMode === "knocks"
+      ? "#a855f7"
+      : heatMode === "landings"
+      ? "#38bdf8"
+      : "#ef4444";
 
   // Smooth playback via requestAnimationFrame.
   // In compact mode the playback loops back to 0 instead of stopping.
@@ -201,6 +228,47 @@ export function ReplayShell({
     if (!showDrops) return [];
     return scene.carePackages.filter((c) => c.time <= time + 0.001);
   }, [scene.carePackages, time, showDrops]);
+
+  // Cluster nearby drops so multiple stacks don't crowd a single landing
+  // pad. Two drops within ~150 m of each other share an icon, with a small
+  // ×N badge to signal "more than one here". Special-flare drops force the
+  // cluster icon to the special variant so the marquee item never goes
+  // hidden behind a regular crate.
+  const dropClusters = useMemo(() => {
+    const CLUSTER_RADIUS_CM = 150_00; // 150 m in centimeters
+    const CLUSTER_R_SQ = CLUSTER_RADIUS_CM * CLUSTER_RADIUS_CM;
+    const out: Array<{
+      x: number;
+      y: number;
+      time: number;
+      count: number;
+      anySpecial: boolean;
+    }> = [];
+    for (const d of visibleDrops) {
+      let merged = false;
+      for (const c of out) {
+        const dx = c.x - d.location.x;
+        const dy = c.y - d.location.y;
+        if (dx * dx + dy * dy < CLUSTER_R_SQ) {
+          c.count += 1;
+          c.time = Math.max(c.time, d.time);
+          c.anySpecial = c.anySpecial || d.kind === "special";
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) {
+        out.push({
+          x: d.location.x,
+          y: d.location.y,
+          time: d.time,
+          count: 1,
+          anySpecial: d.kind === "special",
+        });
+      }
+    }
+    return out;
+  }, [visibleDrops]);
 
   // Vehicle spawns that have appeared by now (BRDMs etc).
   const visibleVehicles = useMemo<VehicleEvent[]>(() => {
@@ -296,6 +364,36 @@ export function ReplayShell({
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Track the on-screen size of the map container so we can clamp the pan
+  // offset — without clamping, dragging at 2× could push the map clean off
+  // the canvas and reveal the page background, which is what the user saw
+  // in screenshot 2.
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = mapWrapRef.current;
+    if (!el) return;
+    const update = () => setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const clampPan = useCallback(
+    (px: number, py: number) => {
+      // With `transform-origin: 50% 50%` and `scale(zoom)`, the inner box
+      // grows symmetrically around the center. Translating beyond
+      // `(size * (zoom - 1)) / 2` pulls the opposite edge into view.
+      const maxX = Math.max(0, (containerSize.w * (zoom - 1)) / 2);
+      const maxY = Math.max(0, (containerSize.h * (zoom - 1)) / 2);
+      return {
+        x: Math.max(-maxX, Math.min(maxX, px)),
+        y: Math.max(-maxY, Math.min(maxY, py)),
+      };
+    },
+    [containerSize, zoom],
+  );
+
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Only pan when zoomed in. When zoom = 1, native click bubble keeps
@@ -313,7 +411,7 @@ export function ReplayShell({
     const onMove = (e: MouseEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      setPan({ x: d.panX + (e.clientX - d.x), y: d.panY + (e.clientY - d.y) });
+      setPan(clampPan(d.panX + (e.clientX - d.x), d.panY + (e.clientY - d.y)));
     };
     const onUp = () => {
       dragRef.current = null;
@@ -325,7 +423,13 @@ export function ReplayShell({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [isDragging]);
+  }, [isDragging, clampPan]);
+
+  // When zoom shrinks (e.g. user clicks "1.0×" reset), re-clamp the existing
+  // pan so we don't end up with a stale offset that's now out of bounds.
+  useEffect(() => {
+    setPan((p) => clampPan(p.x, p.y));
+  }, [zoom, clampPan]);
 
   // Scroll-wheel zoom on the map area (pubg.sh-style).
   const onWheel = useCallback((e: WheelEvent) => {
@@ -350,27 +454,28 @@ export function ReplayShell({
               cx={b.x * CANVAS_SIZE}
               cy={b.y * CANVAS_SIZE}
               r={CANVAS_SIZE / 36}
-              fill={heatMode === "kills" ? "#ef4444" : "#38bdf8"}
+              fill={heatColor}
               opacity={Math.max(0.08, b.count * 0.5)}
             />
           ))}
-          {/* Safe zone (next play area outline) — drawn WHITE per spec.
-              This is the white circle players see in-game. */}
-          {zone?.safetyZonePosition && zone.safetyZoneRadius && (
-            <ZoneCircle
-              cx={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
-              cy={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).y}
-              r={radiusToCanvas(zone.safetyZoneRadius, map, { width: CANVAS_SIZE, height: CANVAS_SIZE })}
-              tone="safe"
-            />
-          )}
-          {/* Blue zone warning — drawn BLUE per spec. The poisonGasWarning
-              in telemetry IS the next-shrinking blue zone perimeter. */}
+          {/* Per user feedback round-3: white = play zone (current safe
+              area), blue = next-zone target. We had them swapped. The
+              `poisonGasWarningPosition` is actually the WHITE circle players
+              see in-game (the next zone target), and `safetyZonePosition`
+              is the current play-area boundary that the blue wall enforces. */}
           {zone?.poisonGasWarningPosition && zone.poisonGasWarningRadius && (
             <ZoneCircle
               cx={gameToCanvas(zone.poisonGasWarningPosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
               cy={gameToCanvas(zone.poisonGasWarningPosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).y}
               r={radiusToCanvas(zone.poisonGasWarningRadius, map, { width: CANVAS_SIZE, height: CANVAS_SIZE })}
+              tone="play"
+            />
+          )}
+          {zone?.safetyZonePosition && zone.safetyZoneRadius && (
+            <ZoneCircle
+              cx={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).x}
+              cy={gameToCanvas(zone.safetyZonePosition, map, { width: CANVAS_SIZE, height: CANVAS_SIZE }).y}
+              r={radiusToCanvas(zone.safetyZoneRadius, map, { width: CANVAS_SIZE, height: CANVAS_SIZE })}
               tone="blue"
             />
           )}
@@ -428,14 +533,13 @@ export function ReplayShell({
             );
           })}
 
-          {/* Drops (care packages) — restored parachute+crate icon (per user
-              feedback). Regular drops are small. "Special" drops (flare-
-              called, marked by special items in their package) get a larger
-              crate with a red flare ring. */}
-          {visibleDrops.map((d, idx) => {
-            const p = gameToCanvas(d.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
-            const fresh = time - d.time < 6;
-            const special = d.kind === "special";
+          {/* Drops — clustered so multiple drops near each other show as a
+              single icon with a "×N" badge. Special (flare-called) drops
+              promote the cluster to the larger crate variant. */}
+          {dropClusters.map((c, idx) => {
+            const p = gameToCanvas({ x: c.x, y: c.y, z: 0 }, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
+            const fresh = time - c.time < 6;
+            const special = c.anySpecial;
             return (
               <g key={`drop-${idx}`} transform={`translate(${p.x} ${p.y})`}>
                 {fresh && (
@@ -484,7 +588,7 @@ export function ReplayShell({
                   y={special ? 3 : 2}
                   width={special ? 8 : 5}
                   height={special ? 6 : 4}
-                  fill={special ? "#92611f" : "#92611f"}
+                  fill="#92611f"
                   stroke={special ? "#fbbf24" : "rgba(8,9,12,0.9)"}
                   strokeWidth={special ? 1 : 0.8}
                 />
@@ -499,6 +603,21 @@ export function ReplayShell({
                   >
                     !
                   </text>
+                )}
+                {c.count > 1 && (
+                  // ×N badge to the upper-right of the crate
+                  <g transform="translate(8 -7)">
+                    <circle r="4.5" fill="rgba(8,9,12,0.95)" stroke="#fbbf24" strokeWidth="0.8" />
+                    <text
+                      fontFamily="var(--font-mono)"
+                      fontSize="5"
+                      fill="#fbbf24"
+                      textAnchor="middle"
+                      y="1.7"
+                    >
+                      ×{c.count}
+                    </text>
+                  </g>
                 )}
               </g>
             );
@@ -859,16 +978,17 @@ function ControlsBar({
   onKills: (v: boolean) => void;
   onDrops: (v: boolean) => void;
   onTracers: (v: boolean) => void;
-  heatMode: "off" | "kills" | "landings";
-  onHeatMode: (m: "off" | "kills" | "landings") => void;
+  heatMode: "off" | "kills" | "damage" | "knocks" | "landings";
+  onHeatMode: (m: "off" | "kills" | "damage" | "knocks" | "landings") => void;
   markers: ScrubberMarker[];
   zoom: number;
   onZoom: (z: number) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  // Speed presets — the slider snaps to these "stops" so users always land
-  // on a sensible value but still get the slider feel.
-  const SPEEDS = [1, 2, 4, 8];
+  // Speed presets — extended per user feedback to go up to 15×, with
+  // visible tick marks at the round 5× and 10× stops. The slider also
+  // got wider (3× the old length) so it's easier to scrub through.
+  const SPEEDS = [1, 2, 5, 10, 15];
   const speedIndex = Math.max(0, SPEEDS.indexOf(speed));
 
   return (
@@ -891,23 +1011,43 @@ function ControlsBar({
           <RestartIcon />
         </button>
 
-        {/* Speed slider — replaces the pill (#6 feedback). 1× → 8× snapping
-            on integer indices, with the live value visible to the right. */}
+        {/* Speed slider — 1× / 2× / 5× / 10× / 15× snap stops. Slider is
+            ~3× wider than v2, with tick marks under 5× and 10× so the user
+            can eyeball common speeds without thinking. */}
         <label className="flex items-center gap-2">
           <span className="font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
             {t("speedLabel")}
           </span>
-          <input
-            type="range"
-            min={0}
-            max={SPEEDS.length - 1}
-            step={1}
-            value={speedIndex}
-            onChange={(e) => onSpeed(SPEEDS[Number(e.target.value)] ?? 1)}
-            className="h-1.5 w-24 cursor-pointer accent-brand"
-            aria-label={t("speedLabel")}
-          />
-          <span className="w-7 text-right font-mono text-[11px] tabular-nums text-fg-muted">
+          <span className="relative flex flex-col items-center">
+            <input
+              type="range"
+              min={0}
+              max={SPEEDS.length - 1}
+              step={1}
+              value={speedIndex}
+              onChange={(e) => onSpeed(SPEEDS[Number(e.target.value)] ?? 1)}
+              className="h-1.5 w-72 cursor-pointer accent-brand"
+              aria-label={t("speedLabel")}
+              list="replay-speed-ticks"
+            />
+            {/* HTML5 datalist tick marks under the slider */}
+            <datalist id="replay-speed-ticks">
+              {SPEEDS.map((_, i) => <option key={i} value={i} />)}
+            </datalist>
+            {/* Manual tick labels — positioned to mirror the snap indices.
+                We highlight 5× and 10× per the user's request. */}
+            <div className="pointer-events-none mt-0.5 flex w-72 justify-between font-mono text-[8px] tabular-nums text-fg-subtle">
+              {SPEEDS.map((s) => (
+                <span
+                  key={s}
+                  className={s === 5 || s === 10 ? "font-semibold text-fg-muted" : ""}
+                >
+                  {s}×
+                </span>
+              ))}
+            </div>
+          </span>
+          <span className="w-9 text-right font-mono text-[11px] tabular-nums text-fg-muted">
             {speed}×
           </span>
         </label>
@@ -958,24 +1098,30 @@ function ControlsBar({
         <Toggle checked={showDrops} onChange={onDrops} label={t("drops")} />
         <Toggle checked={showTracers} onChange={onTracers} label={t("tracers")} />
         <span className="ml-auto inline-flex items-center gap-1 rounded border border-border bg-bg-muted p-0.5">
-          {(["off", "kills", "landings"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onHeatMode(m)}
-              className={`rounded px-2 py-0.5 transition-colors ${
-                heatMode === m
-                  ? m === "kills"
-                    ? "bg-combat/20 text-combat"
-                    : m === "landings"
-                    ? "bg-accent/20 text-accent"
-                    : "bg-bg text-fg"
-                  : "text-fg-subtle hover:text-fg"
-              }`}
-            >
-              {t(`heat_${m}`)}
-            </button>
-          ))}
+          {(["off", "kills", "damage", "knocks", "landings"] as const).map((m) => {
+            const activeColor =
+              m === "kills"
+                ? "bg-combat/20 text-combat"
+                : m === "damage"
+                ? "bg-[#fb923c]/20 text-[#fb923c]"
+                : m === "knocks"
+                ? "bg-[#a855f7]/20 text-[#a855f7]"
+                : m === "landings"
+                ? "bg-accent/20 text-accent"
+                : "bg-bg text-fg";
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onHeatMode(m)}
+                className={`rounded px-2 py-0.5 transition-colors ${
+                  heatMode === m ? activeColor : "text-fg-subtle hover:text-fg"
+                }`}
+              >
+                {t(`heat_${m}`)}
+              </button>
+            );
+          })}
         </span>
       </div>
     </div>
@@ -1013,24 +1159,30 @@ function Scrubber({
         className="relative z-10 w-full accent-brand"
       />
       {markers.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-0 h-2">
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-0 h-5">
           {markers.map((m, i) => {
             const isHover = hovered === i;
             const left = `${m.frac * 100}%`;
-            const cls =
+            // Visible glyph (the dot/bar the user actually sees).
+            const visualCls =
               m.kind === "kill"
-                ? "h-2 w-1.5 rounded-sm bg-success"
+                ? "h-3 w-2 rounded-sm bg-success ring-1 ring-bg/80"
                 : m.kind === "death"
-                ? "h-3 w-0.5 -translate-y-0.5 bg-combat"
-                : "h-1 w-1 rounded-full bg-combat/70";
+                ? "h-4 w-1 rounded-sm bg-combat ring-1 ring-bg/80"
+                : "h-2.5 w-2.5 rounded-full bg-combat/80 ring-1 ring-bg/80";
             return (
               <span
                 key={`mk-${i}-${m.time}`}
-                className={`pointer-events-auto absolute -translate-x-1/2 ${cls}`}
-                style={{ left, top: m.kind === "damage" ? 4 : 0 }}
+                // Hit area is 14×16 px with the visual centered inside.
+                // Much easier to land the cursor on than the old 1.5×8 px
+                // strip. Padding is invisible (the gradient stops at the
+                // visual element).
+                className="pointer-events-auto absolute flex h-4 w-4 -translate-x-1/2 cursor-pointer items-center justify-center"
+                style={{ left, top: 0 }}
                 onMouseEnter={() => setHovered(i)}
                 onMouseLeave={() => setHovered((cur) => (cur === i ? null : cur))}
               >
+                <span className={visualCls} aria-hidden />
                 {isHover && <MarkerTooltip marker={m} t={t} />}
               </span>
             );
@@ -1304,14 +1456,16 @@ function KillfeedHistory({
   );
 }
 
-function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "safe" | "blue" | "red" }) {
-  // safe = next play area outline (white, what players see in-game).
-  // blue = the shrinking blue zone perimeter (poisonGasWarning).
+function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "play" | "blue" | "red" }) {
+  // play = current play zone outline drawn WHITE (the white circle from the
+  //        in-game minimap — where players are safe right now).
+  // blue = the next-zone target boundary drawn BLUE (where the white circle
+  //        will move to when the timer expires).
   // red  = the bombardment zone — dashed so it reads as a temporary hazard.
   const stroke =
-    tone === "safe" ? "#ffffff" : tone === "blue" ? "#38bdf8" : "#ef4444";
+    tone === "play" ? "#ffffff" : tone === "blue" ? "#38bdf8" : "#ef4444";
   const fill =
-    tone === "safe" ? 0.06 : tone === "blue" ? 0.07 : 0.08;
+    tone === "play" ? 0.06 : tone === "blue" ? 0.07 : 0.08;
   return (
     <g>
       <circle
@@ -1320,9 +1474,9 @@ function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; to
         r={r}
         fill="none"
         stroke={stroke}
-        strokeWidth={tone === "safe" ? 1.4 : 1.5}
+        strokeWidth={tone === "play" ? 1.4 : 1.5}
         strokeDasharray={tone === "red" ? "4 3" : undefined}
-        opacity={tone === "safe" ? 0.95 : 0.85}
+        opacity={tone === "play" ? 0.95 : 0.85}
       />
       <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={fill} />
     </g>
