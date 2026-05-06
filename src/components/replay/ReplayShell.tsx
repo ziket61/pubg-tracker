@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import type {
   DamageEvent,
+  KillEvent,
   ParachuteLandingEvent,
   PlayerRef,
   TelemetryScene,
@@ -20,6 +21,9 @@ import Link from "next/link";
 
 const CANVAS_SIZE = 720;
 const TRAIL_WINDOW = 60; // seconds
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 5;
+const ZOOM_STEP = 0.25;
 const TEAM_COLORS = [
   "#f3a536", // brand
   "#38bdf8", // accent
@@ -55,6 +59,12 @@ export interface SerializableScene {
   // players is a Map — pre-serialize as array of [id, ref] for client transport
   playerEntries: Array<[string, PlayerRef]>;
 }
+
+// Marker on the scrubber the user can hover for a richer tooltip.
+type ScrubberMarker =
+  | { kind: "kill"; frac: number; time: number; data: KillEvent }
+  | { kind: "damage"; frac: number; time: number; data: DamageEvent }
+  | { kind: "death"; frac: number; time: number; data: KillEvent };
 
 export function ReplayShell({
   scene: serialized,
@@ -110,9 +120,8 @@ export function ReplayShell({
   const [showTracers, setShowTracers] = useState(true);
   const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // Zoom: 1 / 2 / 4. View centers on focus when zoomed.
+  // Continuous zoom (1.0 .. 5.0), driven by buttons / slider / scroll wheel.
   const [zoom, setZoom] = useState(1);
-  // Fullscreen layout: when true, the sidebar slides below the map.
   const [fullscreen, setFullscreen] = useState(false);
 
   // Track when each player died so the sidebar can grey their row out.
@@ -124,10 +133,13 @@ export function ReplayShell({
     return m;
   }, [scene.kills]);
 
-  const isDead = (accountId: string): boolean => {
-    const t = deathByAccount.get(accountId);
-    return t != null && t <= time;
-  };
+  const isDead = useCallback(
+    (accountId: string): boolean => {
+      const tDeath = deathByAccount.get(accountId);
+      return tDeath != null && tDeath <= time;
+    },
+    [deathByAccount, time],
+  );
 
   // Pre-compute heatmap buckets — they don't depend on `time`.
   const killHeatBuckets = useMemo<HeatBucket[]>(() => killHeat(scene, map.maxCm), [scene, map]);
@@ -183,23 +195,26 @@ export function ReplayShell({
     return scene.carePackages.filter((c) => c.time <= time + 0.001);
   }, [scene.carePackages, time, showDrops]);
 
-  // Focus player's own events for the scrubber timeline markers.
-  const focusEvents = useMemo(() => {
-    if (!focusId || !scene.durationSec) return null;
+  // Focus player's own events for the scrubber timeline markers — now with
+  // full event payload so we can show rich tooltips on hover.
+  const focusMarkers = useMemo<ScrubberMarker[]>(() => {
+    if (!focusId || !scene.durationSec) return [];
     const dur = scene.durationSec;
-    const k: number[] = [];   // kills got
-    const d: number[] = [];   // taken damage spikes (>= 30hp)
-    const dx: number | null = (() => {
-      const kill = scene.kills.find((kk) => kk.victim.accountId === focusId);
-      return kill ? kill.time : null;
-    })();
+    const out: ScrubberMarker[] = [];
     for (const kill of scene.kills) {
-      if (kill.killer?.accountId === focusId) k.push(kill.time / dur);
+      if (kill.killer?.accountId === focusId) {
+        out.push({ kind: "kill", frac: kill.time / dur, time: kill.time, data: kill });
+      }
+      if (kill.victim.accountId === focusId) {
+        out.push({ kind: "death", frac: kill.time / dur, time: kill.time, data: kill });
+      }
     }
     for (const dmg of scene.damages) {
-      if (dmg.victim.accountId === focusId && dmg.damage >= 30) d.push(dmg.time / dur);
+      if (dmg.victim.accountId === focusId && dmg.damage >= 30) {
+        out.push({ kind: "damage", frac: dmg.time / dur, time: dmg.time, data: dmg });
+      }
     }
-    return { kills: k, damageTaken: d, deathFrac: dx != null ? dx / dur : null };
+    return out.sort((a, b) => a.time - b.time);
   }, [focusId, scene.kills, scene.damages, scene.durationSec]);
 
   // Damage tracers — only damages happening within ±1.5 sec of current time.
@@ -255,6 +270,22 @@ export function ReplayShell({
       })
     : null;
 
+  // Scroll-wheel zoom on the map area (pubg.sh-style).
+  const mapWrapRef = useRef<HTMLDivElement | null>(null);
+  const onWheel = useCallback((e: WheelEvent) => {
+    // Only zoom when the cursor is over the map and the user actually scrolls.
+    if (e.ctrlKey || e.metaKey) return; // leave browser zoom alone
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +(z + delta).toFixed(2))));
+  }, []);
+  useEffect(() => {
+    const el = mapWrapRef.current;
+    if (!el || compact) return;
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onWheel, compact]);
+
   const mapInner = (
     <MapCanvas map={map} size={CANVAS_SIZE}>
           {/* Heatmap layer (rendered first so it sits behind everything else) */}
@@ -306,38 +337,29 @@ export function ReplayShell({
               );
             })}
 
-          {/* Drops (care packages) — parachute + crate icon at the drop location */}
+          {/* Drops (care packages) — pubg.sh-style: simple square crate tilted
+              45° (a "diamond"), with a bright outline ring while fresh. */}
           {visibleDrops.map((d, idx) => {
             const p = gameToCanvas(d.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
-            const fresh = time - d.time < 4;
+            const fresh = time - d.time < 6;
             return (
-              <g key={`drop-${idx}`}>
+              <g key={`drop-${idx}`} transform={`translate(${p.x} ${p.y})`}>
                 {fresh && (
-                  <circle cx={p.x} cy={p.y} r="14" fill="none" stroke="#fbbf24" strokeWidth="1.5" opacity="0.8">
-                    <animate attributeName="r" from="8" to="26" dur="1.2s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" from="0.8" to="0" dur="1.2s" repeatCount="indefinite" />
+                  <circle r="11" fill="none" stroke="#fbbf24" strokeWidth="1.5" opacity="0.85">
+                    <animate attributeName="r" from="6" to="22" dur="1.4s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" from="0.85" to="0" dur="1.4s" repeatCount="indefinite" />
                   </circle>
                 )}
-                {/* parachute canopy */}
-                <path
-                  d={`M ${p.x - 7} ${p.y - 3} A 7 5 0 0 1 ${p.x + 7} ${p.y - 3} L ${p.x + 5} ${p.y - 1} A 5 3.5 0 0 0 ${p.x - 5} ${p.y - 1} Z`}
-                  fill="#fbbf24"
-                  stroke="rgba(8,9,12,0.9)"
-                  strokeWidth="0.8"
-                />
-                {/* lines */}
-                <line x1={p.x - 5} y1={p.y - 1} x2={p.x - 1.5} y2={p.y + 2} stroke="rgba(8,9,12,0.9)" strokeWidth="0.8" />
-                <line x1={p.x + 5} y1={p.y - 1} x2={p.x + 1.5} y2={p.y + 2} stroke="rgba(8,9,12,0.9)" strokeWidth="0.8" />
-                {/* crate */}
+                {/* dark backing for legibility against the map */}
                 <rect
-                  x={p.x - 2.5}
-                  y={p.y + 2}
-                  width="5"
-                  height="4"
-                  fill="#92611f"
-                  stroke="rgba(8,9,12,0.9)"
-                  strokeWidth="0.8"
+                  x="-5.4" y="-5.4" width="10.8" height="10.8"
+                  fill="rgba(8,9,12,0.85)"
+                  stroke="#fbbf24"
+                  strokeWidth="1.6"
+                  transform="rotate(45)"
                 />
+                {/* inner dot — gold parachute crate marker */}
+                <rect x="-2" y="-2" width="4" height="4" fill="#fbbf24" transform="rotate(45)" />
               </g>
             );
           })}
@@ -463,8 +485,10 @@ export function ReplayShell({
   const zoomOriginX = focusCanvas && zoom > 1 ? `${(focusCanvas.x / CANVAS_SIZE) * 100}%` : "50%";
   const zoomOriginY = focusCanvas && zoom > 1 ? `${(focusCanvas.y / CANVAS_SIZE) * 100}%` : "50%";
 
+  // Map block + side overlays (zoom + fullscreen + killfeed). Wrapped so we
+  // can drop it into either the inline layout or the fullscreen layout.
   const mapWithOverlays = (
-    <div className="relative">
+    <div ref={mapWrapRef} className="relative h-full w-full">
       {/* Zoom container — outer box stays fixed-size, inner is scaled */}
       <div className="overflow-hidden rounded-2xl">
         <div
@@ -510,16 +534,8 @@ export function ReplayShell({
         </div>
       )}
 
-      {/* Floating zoom + fullscreen controls (top-left of the map) */}
-      <div className="absolute left-3 top-12 flex flex-col gap-1.5">
-        <button
-          type="button"
-          onClick={() => setZoom((z) => (z >= 4 ? 1 : z * 2))}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-strong bg-bg/80 font-mono text-[10px] font-semibold uppercase tracking-wide text-fg-muted backdrop-blur-sm transition-colors hover:text-fg"
-          aria-label={t("zoomIn")}
-        >
-          {zoom}×
-        </button>
+      {/* Floating fullscreen toggle (top-left) */}
+      <div className="absolute left-3 top-12">
         <button
           type="button"
           onClick={() => setFullscreen((f) => !f)}
@@ -530,14 +546,35 @@ export function ReplayShell({
           {fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}
         </button>
       </div>
+
+      {/* Floating zoom rail — pubg.sh-inspired: + / slider / − / reset.
+          Lives on the right edge, vertically centered. */}
+      <ZoomRail
+        zoom={zoom}
+        onZoom={(z) => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +z.toFixed(2))))}
+        t={t}
+      />
     </div>
   );
 
-  // Fullscreen layout
+  // Fullscreen layout: the map gets a square box sized to fit BOTH the
+  // viewport width and the remaining height (after controls / legend).
+  // We use min(100vw, 100vh - 220px) so the square never crops sides or
+  // top/bottom — the user explicitly asked for "fit, do not crop".
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col gap-3 bg-bg p-3 md:p-5">
-        <div className="min-h-0 flex-1 overflow-hidden">{mapWithOverlays}</div>
+      <div className="fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto bg-bg p-3 md:p-5">
+        <div className="flex flex-1 items-center justify-center">
+          <div
+            className="aspect-square w-full"
+            style={{
+              maxWidth: "min(100vw - 24px, 100vh - 240px)",
+              maxHeight: "min(100vw - 24px, 100vh - 240px)",
+            }}
+          >
+            {mapWithOverlays}
+          </div>
+        </div>
         <ControlsBar
           playing={playing}
           onTogglePlay={() => setPlaying((p) => !p)}
@@ -562,9 +599,10 @@ export function ReplayShell({
           onTracers={setShowTracers}
           heatMode={heatMode}
           onHeatMode={setHeatMode}
-          focusEvents={focusEvents}
+          markers={focusMarkers}
           t={t}
         />
+        <Legend t={t} />
       </div>
     );
   }
@@ -572,7 +610,9 @@ export function ReplayShell({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div>
-        {mapWithOverlays}
+        <div className="aspect-square w-full">
+          {mapWithOverlays}
+        </div>
         <ControlsBar
           playing={playing}
           onTogglePlay={() => setPlaying((p) => !p)}
@@ -597,9 +637,11 @@ export function ReplayShell({
           onTracers={setShowTracers}
           heatMode={heatMode}
           onHeatMode={setHeatMode}
-          focusEvents={focusEvents}
+          markers={focusMarkers}
           t={t}
         />
+        {/* Legend lives at the bottom (under the map + controls), full-width. */}
+        <Legend t={t} />
       </div>
 
       <aside className="space-y-3">
@@ -621,29 +663,6 @@ export function ReplayShell({
             t={t}
           />
         )}
-
-        <div className="rounded-xl border border-border bg-surface p-3 text-xs text-fg-muted">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-subtle">
-            {t("legend")}
-          </div>
-          <ul className="mt-2 space-y-1.5">
-            <li className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-brand" /> {t("legendPlayer")}
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-[#3a3f55]" /> {t("legendDead")}
-            </li>
-            <li className="flex items-center gap-2">
-              <KillX /> {t("legendKill")}
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border border-accent" /> {t("legendSafeZone")}
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border border-combat" /> {t("legendBlueZone")}
-            </li>
-          </ul>
-        </div>
       </aside>
     </div>
   );
@@ -672,7 +691,7 @@ function ControlsBar({
   onTracers,
   heatMode,
   onHeatMode,
-  focusEvents,
+  markers,
   t,
 }: {
   playing: boolean;
@@ -695,7 +714,7 @@ function ControlsBar({
   onTracers: (v: boolean) => void;
   heatMode: "off" | "kills" | "landings";
   onHeatMode: (m: "off" | "kills" | "landings") => void;
-  focusEvents: { kills: number[]; damageTaken: number[]; deathFrac: number | null } | null;
+  markers: ScrubberMarker[];
   t: ReturnType<typeof useTranslations>;
 }) {
   return (
@@ -717,63 +736,19 @@ function ControlsBar({
         >
           <RestartIcon />
         </button>
-        <div className="flex h-9 items-center gap-1 rounded-md border border-border bg-bg-muted px-1">
-          {[1, 2, 4, 8].map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onSpeed(s)}
-              className={`h-7 rounded px-2 font-mono text-[11px] font-semibold uppercase transition-colors ${
-                speed === s ? "bg-brand text-bg" : "text-fg-muted hover:text-fg"
-              }`}
-            >
-              {s}×
-            </button>
-          ))}
-        </div>
+        <SpeedSelector value={speed} onChange={onSpeed} />
         <span className="ml-auto font-mono text-xs tabular-nums text-fg-muted">
           {fmtTime(time)} / {fmtTime(duration)}
         </span>
       </div>
 
-      <div className="relative mt-3">
-        <input
-          type="range"
-          min={0}
-          max={duration}
-          step="1"
-          value={Math.floor(time)}
-          onChange={(e) => onTimeChange(Number(e.target.value))}
-          className="relative z-10 w-full accent-brand"
-        />
-        {focusEvents && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-2">
-            {focusEvents.kills.map((frac, i) => (
-              <span
-                key={`fk-${i}`}
-                className="absolute h-2 w-1.5 -translate-x-1/2 rounded-sm bg-success"
-                style={{ left: `${frac * 100}%` }}
-                title={t("eventKill")}
-              />
-            ))}
-            {focusEvents.damageTaken.map((frac, i) => (
-              <span
-                key={`fd-${i}`}
-                className="absolute h-1 w-1 -translate-x-1/2 rounded-full bg-combat/70"
-                style={{ left: `${frac * 100}%`, top: 4 }}
-                title={t("eventDamage")}
-              />
-            ))}
-            {focusEvents.deathFrac != null && (
-              <span
-                className="absolute h-3 w-0.5 -translate-x-1/2 -translate-y-0.5 bg-combat"
-                style={{ left: `${focusEvents.deathFrac * 100}%` }}
-                title={t("eventDeath")}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      <Scrubber
+        time={time}
+        duration={duration}
+        onTimeChange={onTimeChange}
+        markers={markers}
+        t={t}
+      />
 
       <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
         <Toggle checked={showTrails} onChange={onTrails} label={t("trails")} />
@@ -800,6 +775,225 @@ function ControlsBar({
               {t(`heat_${m}`)}
             </button>
           ))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SpeedSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  // pubg.sh uses a small "speed pill" with 1×/2×/4×/8× steps. We keep that
+  // pattern but make the active step clearly highlighted with a sliding bg.
+  const steps = [1, 2, 4, 8];
+  return (
+    <div className="flex h-9 items-center gap-0.5 rounded-md border border-border bg-bg-muted p-0.5">
+      {steps.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          className={`flex h-7 min-w-[34px] items-center justify-center rounded px-2 font-mono text-[11px] font-semibold uppercase transition-all ${
+            value === s
+              ? "bg-brand text-bg shadow-sm"
+              : "text-fg-muted hover:bg-bg/60 hover:text-fg"
+          }`}
+        >
+          {s}×
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Custom scrubber with rich hover tooltips on event markers. Native HTML
+ * `title=` only shows plain text — we want event details (time, player,
+ * weapon) so we render a popover inside the marker on hover.
+ */
+function Scrubber({
+  time,
+  duration,
+  onTimeChange,
+  markers,
+  t,
+}: {
+  time: number;
+  duration: number;
+  onTimeChange: (s: number) => void;
+  markers: ScrubberMarker[];
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  return (
+    <div className="relative mt-3 pt-3">
+      <input
+        type="range"
+        min={0}
+        max={duration}
+        step="1"
+        value={Math.floor(time)}
+        onChange={(e) => onTimeChange(Number(e.target.value))}
+        className="relative z-10 w-full accent-brand"
+      />
+      {markers.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-0 h-2">
+          {markers.map((m, i) => {
+            const isHover = hovered === i;
+            const left = `${m.frac * 100}%`;
+            const cls =
+              m.kind === "kill"
+                ? "h-2 w-1.5 rounded-sm bg-success"
+                : m.kind === "death"
+                ? "h-3 w-0.5 -translate-y-0.5 bg-combat"
+                : "h-1 w-1 rounded-full bg-combat/70";
+            return (
+              <span
+                key={`mk-${i}-${m.time}`}
+                className={`pointer-events-auto absolute -translate-x-1/2 ${cls}`}
+                style={{ left, top: m.kind === "damage" ? 4 : 0 }}
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered((cur) => (cur === i ? null : cur))}
+              >
+                {isHover && <MarkerTooltip marker={m} t={t} />}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarkerTooltip({
+  marker,
+  t,
+}: {
+  marker: ScrubberMarker;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const time = fmtTime(marker.time);
+  let label: string;
+  let detail: string;
+  if (marker.kind === "kill") {
+    label = t("eventKill");
+    detail = t("eventKillTip", {
+      time,
+      killer: marker.data.killer?.name ?? t("tipNoKiller"),
+      victim: marker.data.victim.name,
+      weapon: getItemName(marker.data.damageCauserName),
+    });
+  } else if (marker.kind === "death") {
+    label = t("eventDeath");
+    detail = t("eventDeathTip", {
+      time,
+      killer: marker.data.killer?.name ?? t("tipNoKiller"),
+      victim: marker.data.victim.name,
+      weapon: getItemName(marker.data.damageCauserName),
+    });
+  } else {
+    label = t("eventDamage");
+    detail = t("eventDamageTip", {
+      time,
+      attacker: marker.data.attacker?.name ?? t("tipNoKiller"),
+      damage: Math.round(marker.data.damage),
+      weapon: getItemName(marker.data.damageCauserName),
+    });
+  }
+  return (
+    <div className="pointer-events-none absolute -top-1 left-1/2 z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border bg-bg/95 px-2 py-1 font-mono text-[10px] text-fg shadow-lg backdrop-blur-sm">
+      <div className="text-[9px] uppercase tracking-wider text-fg-subtle">{label}</div>
+      <div className="text-[10px] normal-case tracking-normal text-fg-muted">{detail}</div>
+    </div>
+  );
+}
+
+/**
+ * Vertical zoom rail à la pubg.sh — `+` on top, slider in the middle, `−`
+ * on the bottom, plus a small reset link. Sits on the right edge of the
+ * map; players can also scroll the wheel anywhere on the map to zoom.
+ */
+function ZoomRail({
+  zoom,
+  onZoom,
+  t,
+}: {
+  zoom: number;
+  onZoom: (z: number) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-md border border-border-strong bg-bg/80 p-1 backdrop-blur-sm">
+      <button
+        type="button"
+        onClick={() => onZoom(Math.min(ZOOM_MAX, zoom + ZOOM_STEP))}
+        className="inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-muted hover:text-fg"
+        aria-label={t("zoomIn")}
+        title={t("zoomIn")}
+      >
+        <PlusIcon />
+      </button>
+      <input
+        type="range"
+        min={ZOOM_MIN}
+        max={ZOOM_MAX}
+        step={ZOOM_STEP}
+        value={zoom}
+        onChange={(e) => onZoom(Number(e.target.value))}
+        // CSS trick: rotate a horizontal range input so it looks vertical.
+        // We use a fixed length and orient via writing-mode where possible.
+        className="h-24 w-1 cursor-pointer accent-brand"
+        style={{ writingMode: "vertical-lr" as React.CSSProperties["writingMode"], direction: "rtl" }}
+        aria-label={t("zoomLabel")}
+      />
+      <button
+        type="button"
+        onClick={() => onZoom(Math.max(ZOOM_MIN, zoom - ZOOM_STEP))}
+        className="inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-muted hover:text-fg"
+        aria-label={t("zoomOut")}
+        title={t("zoomOut")}
+      >
+        <MinusIcon />
+      </button>
+      <button
+        type="button"
+        onClick={() => onZoom(1)}
+        className="font-mono text-[9px] uppercase tracking-wide text-fg-subtle transition-colors hover:text-fg"
+        title={t("zoomReset")}
+      >
+        {zoom.toFixed(1)}×
+      </button>
+    </div>
+  );
+}
+
+function Legend({ t }: { t: ReturnType<typeof useTranslations> }) {
+  // Bottom legend — single row on wide screens, wraps gracefully on mobile.
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-fg-muted">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-subtle">
+          {t("legend")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-brand" /> {t("legendPlayer")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-[#3a3f55]" /> {t("legendDead")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <KillX /> {t("legendKill")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <DropDiamond /> {t("legendDrop")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-accent" /> {t("legendSafeZone")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full border border-combat" /> {t("legendBlueZone")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-0.5 w-3 bg-[#fb923c]" /> {t("legendTracer")}
         </span>
       </div>
     </div>
@@ -996,6 +1190,17 @@ function KillX() {
   );
 }
 
+function DropDiamond() {
+  // Mirror the in-map drop glyph (small gold diamond) so the legend
+  // visually matches what the user sees on the map.
+  return (
+    <svg width="10" height="10" viewBox="-6 -6 12 12" aria-hidden>
+      <rect x="-4" y="-4" width="8" height="8" fill="rgba(8,9,12,0.85)" stroke="#fbbf24" strokeWidth="1.4" transform="rotate(45)" />
+      <rect x="-1.5" y="-1.5" width="3" height="3" fill="#fbbf24" transform="rotate(45)" />
+    </svg>
+  );
+}
+
 function FullscreenIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1008,6 +1213,23 @@ function ExitFullscreenIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M5 2v3H2M9 2v3h3M5 12V9H2M9 12V9h3" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <line x1="6" y1="2" x2="6" y2="10" />
+      <line x1="2" y1="6" x2="10" y2="6" />
+    </svg>
+  );
+}
+
+function MinusIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <line x1="2" y1="6" x2="10" y2="6" />
     </svg>
   );
 }
