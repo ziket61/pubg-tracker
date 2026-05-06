@@ -6,6 +6,7 @@ import type { Shard } from "@/lib/pubg/shards";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StatsBlock } from "./StatsBlock";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AnomalyBadges } from "./AnomalyBadges";
 
 export async function LifetimeStats({
   locale,
@@ -33,7 +34,10 @@ export async function LifetimeStats({
     return (
       <Card>
         <CardHeader title={t("lifetime")} />
-        <StatsBlock locale={locale} stats={total} />
+        <div className="space-y-4">
+          <AnomalyBadges locale={locale} stats={total} />
+          <StatsBlock locale={locale} stats={total} />
+        </div>
       </Card>
     );
   } catch {

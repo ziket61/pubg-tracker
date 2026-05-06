@@ -4,6 +4,7 @@ import type { PlayerSummary } from "@/lib/pubg/types";
 import { PlatformIcon } from "@/components/icons/PlatformIcon";
 import { Badge } from "@/components/ui/Badge";
 import { HelmetIcon } from "@/components/icons/GameIcons";
+import { Link } from "@/lib/i18n/navigation";
 
 export async function PlayerHeader({
   locale,
@@ -31,6 +32,16 @@ export async function PlayerHeader({
           </h1>
           {player.bannedTypes && player.bannedTypes.length > 0 && (
             <Badge tone="danger">BANNED</Badge>
+          )}
+          {player.clanId && (
+            <Link
+              href={`/clans/${player.shardId}/${player.clanId}` as `/clans/${string}`}
+              className="transition-colors"
+            >
+              <Badge tone="brand" className="hover:border-brand">
+                CLAN ↗
+              </Badge>
+            </Link>
           )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2.5 text-xs text-fg-muted">

@@ -67,7 +67,13 @@ export async function getPlayerById(
 }
 
 function mapPlayer(res: JsonApiResource, shard: Shard): PlayerSummary {
-  const attrs = (res.attributes ?? {}) as { name?: string; patchVersion?: string; bannedTypes?: string[]; shardId?: Shard };
+  const attrs = (res.attributes ?? {}) as {
+    name?: string;
+    patchVersion?: string;
+    bannedTypes?: string[];
+    shardId?: Shard;
+    clanId?: string;
+  };
   const matches = relMany(res, "matches");
   return {
     id: res.id,
@@ -76,6 +82,29 @@ function mapPlayer(res: JsonApiResource, shard: Shard): PlayerSummary {
     matchIds: matches.map((m) => m.id),
     bannedTypes: attrs.bannedTypes,
     patchVersion: attrs.patchVersion,
+    clanId: attrs.clanId && attrs.clanId.length > 0 ? attrs.clanId : undefined,
+  };
+}
+
+export async function getClan(
+  shard: Shard,
+  clanId: string,
+): Promise<import("./types").ClanSummary> {
+  const doc = await call(`/shards/${shard}/clans/${clanId}`);
+  const data = doc.data as JsonApiResource<{
+    clanTag?: string;
+    clanLevel?: number;
+    clanMemberCount?: number;
+    clanName?: string;
+  }>;
+  const a = data.attributes ?? {};
+  return {
+    id: data.id,
+    shardId: shard,
+    tag: a.clanTag ?? "",
+    name: a.clanName ?? "",
+    level: a.clanLevel ?? 0,
+    memberCount: a.clanMemberCount ?? 0,
   };
 }
 

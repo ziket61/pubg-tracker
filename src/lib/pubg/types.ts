@@ -9,6 +9,16 @@ export interface PlayerSummary {
   matchIds: string[];
   bannedTypes?: string[];
   patchVersion?: string;
+  clanId?: string;
+}
+
+export interface ClanSummary {
+  id: string;
+  shardId: Shard;
+  tag: string;
+  name: string;
+  level: number;
+  memberCount: number;
 }
 
 export interface MatchPreview {

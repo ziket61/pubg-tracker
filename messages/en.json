@@ -226,6 +226,24 @@
     "id": "ID",
     "noSeasons": "No seasons found"
   },
+  "clan": {
+    "title": "Clan",
+    "untitled": "Untitled",
+    "overview": "Overview",
+    "level": "Level",
+    "memberCount": "Members",
+    "tag": "Tag",
+    "apiLimit": "PUBG API doesn't expose the member list — only summary (tag, name, level, member count)."
+  },
+  "anomaly": {
+    "title": "STATISTICAL ANOMALY",
+    "disclaimer": "These numbers are notably above average. Not an accusation of cheating — manual verification is required. PUBG API doesn't expose ban status in real time.",
+    "kd_extreme": "K/D ≥ 6",
+    "headshot_extreme": "HS ≥ 70%",
+    "winrate_extreme": "Win rate ≥ 40%",
+    "top10_extreme": "Top‑10 ≥ 85%",
+    "low_sample": "Small sample"
+  },
   "about": {
     "title": "About",
     "intro": "PUBG Tracker is a web app for viewing PUBG: BATTLEGROUNDS player statistics built on the official public API.",
