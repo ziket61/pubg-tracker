@@ -3,25 +3,28 @@
 import { useTranslations } from "next-intl";
 import { useRouter, usePathname } from "@/lib/i18n/navigation";
 import { useSearchParams } from "next/navigation";
-import { GAME_MODES, PLATFORMS, type GameMode, type Shard } from "@/lib/pubg/shards";
+import {
+  GAME_MODES,
+  LEADERBOARD_SHARDS,
+  type GameMode,
+  type LeaderboardShard,
+} from "@/lib/pubg/shards";
 import { Select } from "@/components/ui/Select";
 
 export function LeaderboardFilters({
   seasons,
   currentSeason,
   currentMode,
-  currentPlatform,
+  currentRegion,
 }: {
   seasons: { id: string; isCurrent: boolean }[];
   currentSeason: string;
   currentMode: GameMode;
-  currentPlatform: Shard;
+  currentRegion: LeaderboardShard;
 }) {
   const t = useTranslations("leaderboard");
   const tm = useTranslations("modes");
-  const tp = useTranslations("platforms");
   const ts = useTranslations("seasons");
-  const tsearch = useTranslations("search");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -58,13 +61,13 @@ export function LeaderboardFilters({
         ))}
       </Select>
       <Select
-        label={tsearch("platformLabel")}
-        value={currentPlatform}
-        onChange={(e) => update("platform", e.target.value)}
+        label={t("selectRegion")}
+        value={currentRegion}
+        onChange={(e) => update("region", e.target.value)}
       >
-        {PLATFORMS.map((p) => (
-          <option key={p} value={p}>
-            {tp(p)}
+        {LEADERBOARD_SHARDS.map((r) => (
+          <option key={r} value={r}>
+            {r.toUpperCase()}
           </option>
         ))}
       </Select>

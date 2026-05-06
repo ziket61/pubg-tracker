@@ -162,6 +162,7 @@ export interface LeaderboardEntry {
 export interface Leaderboard {
   seasonId: string;
   gameMode: GameMode;
-  shardId: Shard;
+  // Regional shard (pc-na, pc-eu, ...) rather than a player shard.
+  shardId: string;
   entries: LeaderboardEntry[];
 }

@@ -209,6 +209,7 @@
     "title": "Leaderboard",
     "selectSeason": "Season",
     "selectMode": "Mode",
+    "selectRegion": "Region",
     "rank": "#",
     "player": "Player",
     "rankPoints": "Points",

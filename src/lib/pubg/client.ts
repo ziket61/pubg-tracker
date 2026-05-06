@@ -373,10 +373,12 @@ export async function getCurrentSeason(shard: Shard): Promise<Season | null> {
 }
 
 export async function getLeaderboard(
-  shard: Shard,
+  shard: Shard | string,
   seasonId: string,
   gameMode: GameMode,
 ): Promise<Leaderboard> {
+  // Leaderboards live under a regional shard (pc-na/pc-eu/etc.), not the
+  // player shard (steam/psn/xbox). See LEADERBOARD_SHARDS in shards.ts.
   const doc = await call(`/shards/${shard}/leaderboards/${seasonId}/${gameMode}`);
   const data = doc.data as JsonApiResource;
   const players = relMany(data, "players");

@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import type { Leaderboard } from "@/lib/pubg/types";
+import { leaderboardShardToPlayerShard } from "@/lib/pubg/shards";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Link } from "@/lib/i18n/navigation";
@@ -36,6 +37,7 @@ export async function LeaderboardTable({
 }) {
   const t = await getTranslations({ locale, namespace: "leaderboard" });
   const entries = limit ? leaderboard.entries.slice(0, limit) : leaderboard.entries;
+  const playerShard = leaderboardShardToPlayerShard(leaderboard.shardId);
 
   if (!entries.length) {
     return <EmptyState title={t("noEntries")} />;
@@ -66,7 +68,7 @@ export async function LeaderboardTable({
               <td className="px-4 py-2.5">{rankCell(e.rank)}</td>
               <td className="px-4 py-2.5">
                 <Link
-                  href={`/players/${leaderboard.shardId}/${encodeURIComponent(e.playerName)}`}
+                  href={`/players/${playerShard}/${encodeURIComponent(e.playerName)}`}
                   className="font-medium text-fg transition-colors hover:text-brand"
                 >
                   {e.playerName}

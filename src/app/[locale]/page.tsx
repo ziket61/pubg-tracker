@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { env } from "@/lib/env";
+import { defaultLeaderboardShard } from "@/lib/pubg/shards";
 import { getCurrentSeason, getLeaderboard } from "@/lib/pubg/client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -50,7 +51,10 @@ async function FeaturedLeaderboard({ locale }: { locale: Locale }) {
   try {
     const season = await getCurrentSeason(env.PUBG_DEFAULT_SHARD);
     if (!season) return null;
-    const lb = await getLeaderboard(env.PUBG_DEFAULT_SHARD, season.id, "squad-fpp");
+    // Leaderboards endpoint requires a regional shard, not the player shard.
+    const region = defaultLeaderboardShard(env.PUBG_DEFAULT_SHARD);
+    const lb = await getLeaderboard(region, season.id, "squad-fpp");
+    if (!lb.entries.length) return null;
     return <LeaderboardTable locale={locale} leaderboard={lb} limit={5} compact />;
   } catch {
     return null;

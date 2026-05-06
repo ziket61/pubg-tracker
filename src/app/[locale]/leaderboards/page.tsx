@@ -1,7 +1,13 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import type { Locale } from "@/lib/i18n/routing";
 import { env } from "@/lib/env";
-import { isGameMode, isShard, type GameMode, type Shard } from "@/lib/pubg/shards";
+import {
+  isGameMode,
+  isLeaderboardShard,
+  defaultLeaderboardShard,
+  type GameMode,
+  type LeaderboardShard,
+} from "@/lib/pubg/shards";
 import { getLeaderboard, getSeasons } from "@/lib/pubg/client";
 import { sortSeasonsDesc } from "@/lib/pubg/seasons";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -14,18 +20,22 @@ export default async function LeaderboardsPage({
   searchParams,
 }: {
   params: Promise<{ locale: Locale }>;
-  searchParams: Promise<{ season?: string; mode?: string; platform?: string }>;
+  searchParams: Promise<{ season?: string; mode?: string; region?: string }>;
 }) {
   const { locale } = await params;
-  const { season, mode, platform } = await searchParams;
+  const { season, mode, region } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations({ locale, namespace: "leaderboard" });
   const tc = await getTranslations({ locale, namespace: "common" });
 
-  const shard: Shard =
-    platform && isShard(platform) ? platform : env.PUBG_DEFAULT_SHARD;
+  const regionShard: LeaderboardShard =
+    region && isLeaderboardShard(region)
+      ? region
+      : defaultLeaderboardShard(env.PUBG_DEFAULT_SHARD);
 
-  const seasons = sortSeasonsDesc(await getSeasons(shard));
+  // Season identifiers come from the player-shard endpoint and are shared
+  // across regions of the same platform.
+  const seasons = sortSeasonsDesc(await getSeasons(env.PUBG_DEFAULT_SHARD));
   const current = seasons.find((s) => s.isCurrent);
   const seasonId =
     season && seasons.some((s) => s.id === season)
@@ -35,7 +45,7 @@ export default async function LeaderboardsPage({
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
+      <h1 className="font-display text-2xl font-bold sm:text-3xl">{t("title")}</h1>
       <Card>
         {seasonId ? (
           <>
@@ -46,13 +56,13 @@ export default async function LeaderboardsPage({
                   seasons={seasons.map((s) => ({ id: s.id, isCurrent: s.isCurrent }))}
                   currentSeason={seasonId}
                   currentMode={gameMode}
-                  currentPlatform={shard}
+                  currentRegion={regionShard}
                 />
               }
             />
             <LeaderboardWithFallback
               locale={locale}
-              shard={shard}
+              region={regionShard}
               seasonId={seasonId}
               gameMode={gameMode}
             />
@@ -67,17 +77,20 @@ export default async function LeaderboardsPage({
 
 async function LeaderboardWithFallback({
   locale,
-  shard,
+  region,
   seasonId,
   gameMode,
 }: {
   locale: Locale;
-  shard: Shard;
+  region: LeaderboardShard;
   seasonId: string;
   gameMode: GameMode;
 }) {
   try {
-    const lb = await getLeaderboard(shard, seasonId, gameMode);
+    const lb = await getLeaderboard(region, seasonId, gameMode);
+    if (!lb.entries.length) {
+      return <EmptyState title="—" />;
+    }
     return <LeaderboardTable locale={locale} leaderboard={lb} />;
   } catch {
     return <EmptyState title="—" />;
