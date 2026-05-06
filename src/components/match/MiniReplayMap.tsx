@@ -66,6 +66,7 @@ export async function MiniReplayMap({
     knocks: scene.knocks,
     zones: scene.zones,
     carePackages: scene.carePackages,
+    parachuteLandings: scene.parachuteLandings,
     damageHits: [],
     playerEntries: Array.from(scene.players.entries()),
   };

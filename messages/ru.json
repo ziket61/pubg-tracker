@@ -187,7 +187,14 @@
     "legendBlueZone": "Газовая зона",
     "heat_off": "Heatmap off",
     "heat_kills": "Heat: убийства",
-    "heat_landings": "Heat: посадки"
+    "heat_landings": "Heat: посадки",
+    "zoomIn": "Зум",
+    "enterFullscreen": "На весь экран",
+    "exitFullscreen": "Выйти из fullscreen",
+    "killfeedTitle": "Хроника killfeed",
+    "eventKill": "Кил",
+    "eventDamage": "Получил урон",
+    "eventDeath": "Смерть"
   },
   "mastery": {
     "title": "Мастерство",

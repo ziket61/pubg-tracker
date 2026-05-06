@@ -5,6 +5,7 @@ import type {
   DamageEvent,
   KillEvent,
   KnockEvent,
+  ParachuteLandingEvent,
   PlayerRef,
   PositionSample,
   RawTelemetryEvent,
@@ -78,6 +79,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   const knocks: KnockEvent[] = [];
   const damages: DamageEvent[] = [];
   const carePackages: CarePackageEvent[] = [];
+  const parachuteLandings: ParachuteLandingEvent[] = [];
   const zones: ZoneSample[] = [];
   const players = new Map<string, PlayerRef>();
 
@@ -204,6 +206,24 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
         });
         break;
       }
+      case "LogParachuteLanding": {
+        const ev = e as RawTelemetryEvent & { character?: RawCharacter };
+        const c = ev.character;
+        if (!c?.accountId || !c.location) continue;
+        parachuteLandings.push({
+          time: tOf(e),
+          accountId: c.accountId,
+          name: c.name ?? c.accountId,
+          teamId: c.teamId,
+          location: vec(c.location),
+        });
+        seenPlayer({
+          accountId: c.accountId,
+          name: c.name ?? c.accountId,
+          teamId: c.teamId,
+        });
+        break;
+      }
       case "LogCarePackageLand": {
         const ev = e as RawTelemetryEvent & {
           itemPackage?: { itemPackageId?: string; location?: { x?: number; y?: number; z?: number } };
@@ -248,6 +268,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   knocks.sort((a, b) => a.time - b.time);
   damages.sort((a, b) => a.time - b.time);
   carePackages.sort((a, b) => a.time - b.time);
+  parachuteLandings.sort((a, b) => a.time - b.time);
   zones.sort((a, b) => a.time - b.time);
 
   return {
@@ -260,6 +281,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
     knocks,
     damages,
     carePackages,
+    parachuteLandings,
     zones,
     players,
   };

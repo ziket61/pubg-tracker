@@ -64,6 +64,14 @@ export interface CarePackageEvent {
   location: Vec3;
 }
 
+export interface ParachuteLandingEvent {
+  time: number;
+  accountId: string;
+  name: string;
+  teamId?: number;
+  location: Vec3;
+}
+
 export interface ZoneSample {
   time: number;
   poisonGasWarningPosition?: Vec3;
@@ -82,6 +90,7 @@ export interface TelemetryScene {
   knocks: KnockEvent[];
   damages: DamageEvent[];
   carePackages: CarePackageEvent[];
+  parachuteLandings?: ParachuteLandingEvent[];
   zones: ZoneSample[];
   players: Map<string, PlayerRef>;
 }

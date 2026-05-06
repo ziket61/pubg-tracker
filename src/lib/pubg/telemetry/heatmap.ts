@@ -43,12 +43,32 @@ export function killHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
 }
 
 export function landingHeat(scene: TelemetryScene, maxCm: number): HeatBucket[] {
-  // First position per player is the landing spot
-  const first = new Map<string, { x: number; y: number }>();
-  for (const p of scene.positions) {
-    if (!first.has(p.accountId)) {
-      first.set(p.accountId, { x: p.location.x, y: p.location.y });
+  // Prefer the explicit `LogParachuteLanding` event when telemetry has it.
+  // Without it, "first position" sits on the plane's flight path, not where
+  // players actually touched ground, which is what the user wants to see.
+  const points: Array<{ x: number; y: number }> = [];
+
+  if (scene.parachuteLandings && scene.parachuteLandings.length > 0) {
+    const seen = new Set<string>();
+    for (const land of scene.parachuteLandings) {
+      if (seen.has(land.accountId)) continue;
+      seen.add(land.accountId);
+      points.push({ x: land.location.x, y: land.location.y });
     }
+  } else {
+    // Fallback: use the LATEST position within the first 60 seconds — by
+    // then the parachuting is over and the player is on the ground.
+    const SETTLE_TIME = 60;
+    const settled = new Map<string, { x: number; y: number; t: number }>();
+    for (const p of scene.positions) {
+      if (p.time > SETTLE_TIME) continue;
+      const cur = settled.get(p.accountId);
+      if (!cur || p.time > cur.t) {
+        settled.set(p.accountId, { x: p.location.x, y: p.location.y, t: p.time });
+      }
+    }
+    points.push(...Array.from(settled.values()).map((s) => ({ x: s.x, y: s.y })));
   }
-  return bucketize(Array.from(first.values()), maxCm);
+
+  return bucketize(points, maxCm);
 }
