@@ -10,15 +10,18 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { MapCanvas } from "@/components/replay/MapCanvas";
 import { formatDuration } from "@/lib/format/duration";
+import { Link } from "@/lib/i18n/navigation";
 
 const SIZE = 480;
 
 export async function CarePackageTracker({
   locale,
   match,
+  shard,
 }: {
   locale: Locale;
   match: MatchDetails;
+  shard: string;
 }) {
   const t = await getTranslations({ locale, namespace: "match" });
 
@@ -66,34 +69,49 @@ export async function CarePackageTracker({
     return { ...drop, nearbyKills };
   });
 
+  const replayHref = `/matches/${match.id}/replay?shard=${shard}` as `/matches/${string}/replay`;
+
+  const mapEl = (
+    <div className="relative">
+      <MapCanvas map={map} size={SIZE}>
+        {enriched.map((drop, i) => {
+          const p = gameToCanvas(drop.location, map, { width: SIZE, height: SIZE });
+          return (
+            <g key={i}>
+              <circle cx={p.x} cy={p.y} r="14" fill="none" stroke="#fbbf24" strokeWidth="1" opacity="0.4" />
+              <circle cx={p.x} cy={p.y} r="5" fill="#fbbf24" stroke="rgba(8,9,12,0.9)" strokeWidth="1.5" />
+              <text
+                x={p.x + 9}
+                y={p.y + 3}
+                fontFamily="var(--font-mono)"
+                fontSize="9"
+                fill="#fbbf24"
+                style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.9)", strokeWidth: 3 } as React.CSSProperties}
+              >
+                {formatDuration(drop.time)}
+              </text>
+            </g>
+          );
+        })}
+      </MapCanvas>
+      <span className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border border-brand-dim/60 bg-brand/15 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur-sm">
+        {t("openReplay")} ↗
+      </span>
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader title={t("carePackages")} accent="brand" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div>
-          <MapCanvas map={map} size={SIZE}>
-            {enriched.map((drop, i) => {
-              const p = gameToCanvas(drop.location, map, { width: SIZE, height: SIZE });
-              return (
-                <g key={i}>
-                  <circle cx={p.x} cy={p.y} r="14" fill="none" stroke="#fbbf24" strokeWidth="1" opacity="0.4" />
-                  <circle cx={p.x} cy={p.y} r="5" fill="#fbbf24" stroke="rgba(8,9,12,0.9)" strokeWidth="1.5" />
-                  <text
-                    x={p.x + 9}
-                    y={p.y + 3}
-                    fontFamily="var(--font-mono)"
-                    fontSize="9"
-                    fill="#fbbf24"
-                    style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.9)", strokeWidth: 3 } as React.CSSProperties}
-                  >
-                    {formatDuration(drop.time)}
-                  </text>
-                </g>
-              );
-            })}
-          </MapCanvas>
-        </div>
+        <Link
+          href={replayHref}
+          className="block transition-transform hover:scale-[1.005]"
+          aria-label={t("openReplay")}
+        >
+          {mapEl}
+        </Link>
 
         <ul className="space-y-2">
           {enriched.map((drop, i) => (

@@ -8,6 +8,7 @@ import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
 import { killHeat, landingHeat, type HeatBucket } from "@/lib/pubg/telemetry/heatmap";
 import type { MapMeta } from "@/lib/pubg/maps";
 import { MapCanvas } from "./MapCanvas";
+import Link from "next/link";
 
 const CANVAS_SIZE = 720;
 const TRAIL_WINDOW = 60; // seconds
@@ -45,10 +46,19 @@ export function ReplayShell({
   scene: serialized,
   map,
   defaultFocusId,
+  autoPlay = false,
+  compact = false,
+  clickThroughHref,
 }: {
   scene: SerializableScene;
   map: MapMeta;
   defaultFocusId?: string;
+  /** Start playing immediately on mount. Defaults to false. */
+  autoPlay?: boolean;
+  /** Hide the side panel + scrubber + extras. The map auto-loops at 8x. */
+  compact?: boolean;
+  /** When set, the map area is wrapped in a Link to this href (for "open full replay"). */
+  clickThroughHref?: string;
 }) {
   const t = useTranslations("replay");
   const tc = useTranslations("common");
@@ -72,20 +82,22 @@ export function ReplayShell({
   );
 
   const [time, setTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(2);
+  const [playing, setPlaying] = useState(autoPlay);
+  const [speed, setSpeed] = useState(compact ? 8 : 2);
   const [focusId, setFocusId] = useState<string | null>(defaultFocusId ?? null);
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
   const [showKills, setShowKills] = useState(true);
   const [heatMode, setHeatMode] = useState<"off" | "kills" | "landings">("off");
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   // Pre-compute heatmap buckets — they don't depend on `time`.
   const killHeatBuckets = useMemo<HeatBucket[]>(() => killHeat(scene, map.maxCm), [scene, map]);
   const landingHeatBuckets = useMemo<HeatBucket[]>(() => landingHeat(scene, map.maxCm), [scene, map]);
   const activeHeat = heatMode === "kills" ? killHeatBuckets : heatMode === "landings" ? landingHeatBuckets : [];
 
-  // Smooth playback via requestAnimationFrame
+  // Smooth playback via requestAnimationFrame.
+  // In compact mode the playback loops back to 0 instead of stopping.
   const lastTickRef = useRef<number | null>(null);
   useEffect(() => {
     if (!playing) {
@@ -100,6 +112,9 @@ export function ReplayShell({
       setTime((cur) => {
         const next = cur + (dtMs / 1000) * speed;
         if (next >= scene.durationSec) {
+          if (compact) {
+            return 0; // loop
+          }
           setPlaying(false);
           return scene.durationSec;
         }
@@ -109,7 +124,7 @@ export function ReplayShell({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, speed, scene.durationSec]);
+  }, [playing, speed, scene.durationSec, compact]);
 
   // Snapshots
   const snapshots = useMemo(() => snapshotAt(scene, Math.floor(time)), [scene, time]);
@@ -131,10 +146,8 @@ export function ReplayShell({
     return arr;
   }, [scene.players]);
 
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-      <div>
-        <MapCanvas map={map} size={CANVAS_SIZE}>
+  const mapInner = (
+    <MapCanvas map={map} size={CANVAS_SIZE}>
           {/* Heatmap layer (rendered first so it sits behind everything else) */}
           {activeHeat.map((b, i) => (
             <circle
@@ -200,36 +213,80 @@ export function ReplayShell({
           {snapshots.map((s) => {
             const c = gameToCanvas({ x: s.x, y: s.y, z: 0 }, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
             const isFocus = s.accountId === focusId;
+            const isHover = s.accountId === hoverId;
             const color = teamColor(s.teamId);
             const dead = s.health <= 0;
             const alpha = s.isStale ? 0.35 : 1;
             return (
               <g key={s.accountId} opacity={alpha}>
-                {isFocus && <circle cx={c.x} cy={c.y} r="9" fill="none" stroke={color} strokeWidth="1" opacity="0.5" />}
+                {/* Drop shadow under live dot — adds 3D depth on flat 2D map */}
+                {!dead && (
+                  <ellipse
+                    cx={c.x}
+                    cy={c.y + 2.5}
+                    rx={isFocus ? 5 : 3.5}
+                    ry={2}
+                    fill="rgba(8,9,12,0.7)"
+                  />
+                )}
+                {(isFocus || isHover) && (
+                  <circle cx={c.x} cy={c.y} r="9" fill="none" stroke={color} strokeWidth="1" opacity="0.5" />
+                )}
                 <circle
                   cx={c.x}
                   cy={c.y}
-                  r={isFocus ? 5 : 3.5}
+                  r={isFocus || isHover ? 5 : 3.5}
                   fill={dead ? "#3a3f55" : color}
-                  stroke="rgba(8,9,12,0.9)"
+                  stroke="rgba(8,9,12,0.95)"
                   strokeWidth="1.25"
+                  onMouseEnter={() => !compact && setHoverId(s.accountId)}
+                  onMouseLeave={() => !compact && setHoverId(null)}
+                  style={{ cursor: compact ? "inherit" : "pointer" }}
                 />
-                {isFocus && (
+                {(isFocus || isHover) && (
                   <text
                     x={c.x + 8}
                     y={c.y + 3}
                     fontFamily="var(--font-mono)"
                     fontSize="9"
                     fill={color}
-                    style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.9)", strokeWidth: 3 } as React.CSSProperties}
+                    style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.95)", strokeWidth: 3 } as React.CSSProperties}
                   >
                     {s.name}
+                    {isHover && !isFocus ? ` · ${s.health.toFixed(0)}HP` : ""}
                   </text>
                 )}
               </g>
             );
           })}
         </MapCanvas>
+  );
+
+  // Compact mode: just an auto-looping map, optional click-through to /replay.
+  if (compact) {
+    const mapBlock = (
+      <div className="relative">
+        {mapInner}
+        {clickThroughHref && (
+          <span className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border border-brand-dim/60 bg-brand/15 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur-sm">
+            {t("openReplay")} ↗
+          </span>
+        )}
+      </div>
+    );
+    return clickThroughHref ? (
+      <Link href={clickThroughHref} className="block transition-transform hover:scale-[1.005]" aria-label={t("openReplay")}>
+        {mapBlock}
+      </Link>
+    ) : (
+      mapBlock
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      <div>
+        {mapInner}
 
         {/* Controls bar under canvas */}
         <div className="mt-3 rounded-xl border border-border bg-surface p-3">

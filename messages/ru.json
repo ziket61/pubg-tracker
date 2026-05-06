@@ -147,6 +147,8 @@
     "kindDeath": "Смерть",
     "showingFirstN": "Показано {count} из {total}",
     "routeMap": "Маршрут на карте",
+    "liveMap": "Карта матча",
+    "liveMapFocused": "Карта матча · следить за игроком",
     "routeMapDescription": "Маршрут игрока {name}: место приземления, путь, киллы, точка смерти.",
     "routeStart": "Старт",
     "routePath": "Путь",

@@ -147,6 +147,8 @@
     "kindDeath": "Death",
     "showingFirstN": "Showing {count} of {total}",
     "routeMap": "Route map",
+    "liveMap": "Match map",
+    "liveMapFocused": "Match map · follow player",
     "routeMapDescription": "{name}'s route: landing, path, kills, death.",
     "routeStart": "Start",
     "routePath": "Path",

@@ -13,7 +13,7 @@ import { MatchHighlights } from "@/components/match/MatchHighlights";
 import { KillTree } from "@/components/match/KillTree";
 import { DeathAnalysis } from "@/components/match/DeathAnalysis";
 import { DamageTimeline } from "@/components/match/DamageTimeline";
-import { PlayerRouteMap } from "@/components/match/PlayerRouteMap";
+import { MiniReplayMap } from "@/components/match/MiniReplayMap";
 import { WeaponBreakdown } from "@/components/match/WeaponBreakdown";
 import { CarePackageTracker } from "@/components/match/CarePackageTracker";
 import { LootTimeline } from "@/components/match/LootTimeline";
@@ -113,14 +113,15 @@ export default async function MatchPage({
               <Suspense
                 fallback={
                   <Card>
-                    <CardHeader title={t("routeMap")} />
-                    <Skeleton className="h-72 w-full" />
+                    <CardHeader title={t("liveMap")} />
+                    <Skeleton className="aspect-square w-full" />
                   </Card>
                 }
               >
-                <PlayerRouteMap
+                <MiniReplayMap
                   locale={locale}
                   match={match}
+                  shard={shard}
                   accountId={focusParticipant.stats.playerId}
                 />
               </Suspense>
@@ -190,7 +191,7 @@ export default async function MatchPage({
           </Card>
         }
       >
-        <CarePackageTracker locale={locale} match={match} />
+        <CarePackageTracker locale={locale} match={match} shard={shard} />
       </Suspense>
 
       <Card>
