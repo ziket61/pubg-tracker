@@ -1,165 +1,163 @@
 # PUBG Stat Tracker
 
-Веб-приложение для просмотра статистики игроков PUBG: BATTLEGROUNDS, истории матчей, лидербордов и мастерства оружия. Построено на официальном публичном PUBG API.
+**🟧 Live: [pubg-tracker-phi.vercel.app](https://pubg-tracker-phi.vercel.app)**
+
+Веб-приложение для просмотра статистики игроков **PUBG: BATTLEGROUNDS**: профили, история матчей, лидерборды, мастерство оружия, **2D-replay матчей**, анализ смертей, маршрут на карте, тепловые карты. Без рекламы и регистрации, на официальном публичном PUBG API.
 
 [English version below](#english-version)
 
 ---
 
-## Возможности
+## Что умеет
 
-- Поиск игроков на всех платформах: Steam, PSN, Xbox, Kakao, Console, Stadia
-- Пожизненная статистика и статистика по сезонам во всех режимах: Solo / Duo / Squad × TPP / FPP
-- Производные метрики: K/D, Win Rate, Top‑10 Rate, средний урон, средняя длительность жизни, % хедшотов
-- Последние матчи с полным составом лобби и статистикой каждого участника
-- Детали матча с хайлайтами из телеметрии (longest kill, top damage, top kills)
-- Прогресс мастерства оружия и выживания
-- Лидерборды по сезонам
-- Двуязычный интерфейс: **русский (по умолчанию) / английский** — выбор через URL (`/ru/...`, `/en/...`)
-- Встроенный mock‑режим — приложение **запускается без API‑ключа** на локальных фикстурах для разработки и демонстрации
+### Поиск и профили
+- Поиск игрока по нику на любой платформе (Steam, PSN, Xbox, Kakao, Console, Stadia)
+- Lifetime stats и stats по сезонам, разрезы по режимам (Solo/Duo/Squad × TPP/FPP)
+- Производные метрики: K/D, Win Rate, Top‑10 Rate, средний урон, headshot %, среднее выживание
+- **Recent Form** — агрегаты последних 5 матчей плюс хронологический strip placement‑бейджей
+- **Best Match** — лучший матч по композитному score (kills + damage + placement)
+- Мастерство оружия и выживания
+- **Избранное и недавние игроки** (хранятся локально, на сервер не уходят)
 
-## Стек
+### Сравнение игроков
+- `/<locale>/compare?a=<name1>&b=<name2>` — два игрока side‑by‑side
+- Lifetime + recent form, зелёная подсветка победителя по каждой метрике
 
-Next.js 15 (App Router, RSC) · React 19 · TypeScript (strict) · Tailwind CSS 3 · next-intl · Zod
+### Матчи
+- Список последних матчей с местом, K/D в матче, картой, режимом, временем
+- Детальная страница матча с составом лобби и хайлайтами по телеметрии
+- **Хроника боёв** (Kill Tree) — кто кого нокнул и кто добил, по командам жертв
+- **Care packages** — карта дропов, время появления, киллы поблизости
+- **Per‑player вид** при клике на свой матч из профиля:
+    - **Как я умер** — киллер, оружие, дистанция, был ли knock, последние удары перед смертью
+    - **Маршрут на карте** — точка приземления, путь, киллы, точка смерти
+    - **По оружию** — kills/knocks/damage/HS/longest kill для каждого оружия в матче
+    - **Хронология урона** — таймлайн событий с разделением «дал/получил/нокаут/смерть»
 
-## Быстрый старт
+### 2D Replay
+- `/<locale>/matches/<id>/replay` — воспроизведение матча на тактической карте
+- Play/pause, скорость x1/x2/x4/x8, scrubber по таймлайну
+- Точки игроков с цветами по командам, fade для отключённых/мёртвых
+- Trail focus‑игрока (60 секунд)
+- Overlay синей и белой зон, kill markers с пульсацией
+- **Heatmaps** — kill heatmap (красный) или landing heatmap (cyan)
+- Селектор focus‑игрока (60+ участников лобби в матче)
 
-### 1. Установите Node.js 20+
+### Лидерборды и сезоны
+- Топ‑100 текущего сезона по любому режиму
+- Медали top‑3 (золото/серебро/бронза), zebra‑строки, цветовое кодирование столбцов
+- Сезоны: список с пометкой текущего и межсезонья
 
-Скачайте с [nodejs.org](https://nodejs.org/). Проверьте версию:
+### Двуязычный интерфейс
+- 🇷🇺 Русский (по умолчанию) и 🇬🇧 Английский, переключение в правом верхнем углу
+
+---
+
+## Локальный запуск
+
+### 1. Node.js 20+ и API key
 
 ```bash
-node --version    # требуется v20 или новее
-npm --version
-```
-
-### 2. Установите зависимости
-
-```bash
+node --version    # 20+
+git clone https://github.com/ziket61/pubg-tracker.git
+cd pubg-tracker
 npm install
-```
-
-### 3. Настройте окружение
-
-```bash
 cp .env.example .env.local
 ```
 
-Отредактируйте `.env.local`:
+Получить ключ бесплатно: [developer.pubg.com](https://developer.pubg.com/) → создать app → скопировать API key в `.env.local`:
 
-- **Нет ключа?** Оставьте `PUBG_API_KEY` пустым или поставьте `PUBG_USE_MOCKS=1` — приложение запустится на локальных фикстурах из `src/lib/pubg/mocks/`. Это удобно для первого запуска и для демо.
-- **Есть ключ?** Вставьте его в `PUBG_API_KEY=...` и оставьте `PUBG_USE_MOCKS=0`.
+```
+PUBG_API_KEY=eyJ0eXAi...
+```
 
-Получить ключ можно бесплатно на [developer.pubg.com](https://developer.pubg.com/).
+> ⚠️ `.env.local` уже в `.gitignore` — реальный ключ не попадёт в репозиторий.
 
-> ⚠️ Никогда не коммитьте `.env.local` — он уже в `.gitignore`. Реальный ключ должен жить только локально и в Environment Variables хостинга.
-
-### 4. Запустите dev-сервер
+### 2. Запуск
 
 ```bash
 npm run dev
 ```
 
-Откройте [http://localhost:3000](http://localhost:3000) — корневой URL автоматически редиректит на `/ru`.
+→ [http://localhost:3000](http://localhost:3000) (редирект на `/ru`)
 
-В шапке появится бейдж «Демо-режим», если приложение работает на моках.
+### Команды
 
-### 5. (Опционально) Загрузите иконки
-
-```bash
-npm run sync-assets
-```
-
-Скрипт скачивает иконки оружия и словари из репозитория [pubg/api-assets](https://github.com/pubg/api-assets) в `public/assets/`. Без этого UI использует placeholder‑иконки.
-
-## Доступные команды
-
-| Команда | Действие |
+| Команда | Что делает |
 |---|---|
-| `npm run dev` | Запустить dev‑сервер |
+| `npm run dev` | Dev‑сервер с HMR |
 | `npm run build` | Production‑сборка |
-| `npm run start` | Запустить production‑сервер |
-| `npm run lint` | ESLint |
+| `npm start` | Production‑сервер |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run sync-assets` | Подтянуть иконки и словари из `pubg/api-assets` |
+| `npm run lint` | ESLint |
+| `npm run test` | Vitest (62 теста для pure libs) |
+| `npm run sync-assets` | Подтянуть иконки и словари из [pubg/api-assets](https://github.com/pubg/api-assets) |
+| `bash scripts/deploy.sh` | One‑shot деплой на GitHub + Vercel (см. ниже) |
+
+---
 
 ## Архитектура
 
-- **Серверный proxy**: все запросы к `api.pubg.com` идут через единый эндпоинт `/api/pubg/[...path]`. API‑ключ никогда не попадает в клиентский бандл.
+- **Server‑side proxy**: все запросы к `api.pubg.com` идут через единый эндпоинт `/api/pubg/[...path]`. API‑ключ никогда не попадает в клиентский бандл.
 - **Авторизация и заголовки**: `Authorization: Bearer <PUBG_API_KEY>` и `Accept: application/vnd.api+json`.
+- **Защита проксика**: origin‑check + per‑IP rate‑limit (30 запросов/мин на IP) — без этого деплой можно использовать как бесплатный фронт PUBG API на чужой ключ.
+- **Rate limit к PUBG**: in‑process token bucket в `src/lib/pubg/rate-limit.ts` соблюдает лимит **10 запросов/мин**, плюс 8‑секундный таймаут на каждый upstream‑вызов.
 - **Кэширование**: Next.js `fetch` с `revalidate` под каждый ресурс — матчи 30 дней, профили 5 минут, лидерборды 10 минут, сезоны 24 часа, телеметрия 30 дней.
-- **Rate limit**: in‑process token bucket в `src/lib/pubg/rate-limit.ts` соблюдает лимит PUBG API в **10 запросов/мин**. На 429 возвращается понятное сообщение пользователю с указанием времени ожидания.
-- **Mock‑режим**: при пустом `PUBG_API_KEY` или `PUBG_USE_MOCKS=1` все запросы перехватываются и обслуживаются фикстурами из `src/lib/pubg/mocks/`.
-- **Внутренние ограничения матчей**: PUBG API хранит данные матчей не более 14 дней — приложение не обещает «всю историю», только то, что доступно через relationships.matches игрока.
+- **Дедупликация**: `RecentForm` и `RecentMatches` шарят один fetch матчей через `getPlayerRecentMatches` — page lifts the fetch into one Suspense boundary, не дублируя upstream‑вызовы.
+- **Telemetry layer**: permissive parser в `src/lib/pubg/telemetry/parser.ts` — нормализует события (`LogPlayerKillV2`, `LogPlayerMakeGroggy`, `LogPlayerTakeDamage`, `LogPlayerPosition`, `LogGameStatePeriodic`, `LogCarePackageLand`), неизвестные события игнорируются. На этом слое: kill‑tree, death analysis, damage timeline, route, weapon analytics, heatmap, replay scene.
+- **i18n**: next‑intl, локаль в URL (`/ru/...`, `/en/...`), сообщения в `messages/{ru,en}.json`.
+- **Внутренние ограничения матчей**: PUBG API хранит данные матчей не более **14 дней** — поэтому показывается только то, что доступно через `relationships.matches` игрока.
+
+---
 
 ## Деплой на Vercel
 
-Бесплатный план Vercel Hobby подходит для этого проекта.
+Бесплатный план Vercel Hobby подходит. Репозиторий уже подключён к auto‑deploy: каждый `git push` на `main` автоматически собирает и катит прод.
 
-### Шаг 1. Создайте репозиторий на GitHub
+### Первый раз
 
 ```bash
-git init
-git add .
-git commit -m "init pubg tracker"
-# Создайте пустой репозиторий на github.com, затем:
-git remote add origin https://github.com/<ваш-логин>/<имя-репозитория>.git
-git branch -M main
-git push -u origin main
+# 1. Логины (один раз каждый, открывают браузер)
+"/c/Program Files/GitHub CLI/gh.exe" auth login --web -h github.com -p https
+vercel login
+
+# 2. One‑shot деплой — создаёт репо, пушит, прокидывает PUBG_API_KEY в Vercel env, деплоит
+bash scripts/deploy.sh
 ```
 
-> Файл `.env.local` уже исключён через `.gitignore` — секреты не попадут в репозиторий.
+`scripts/deploy.sh` идемпотентный: запусти повторно, если что‑то упало посередине.
 
-### Шаг 2. Импортируйте проект в Vercel
+### После первого деплоя
 
-1. Откройте [vercel.com/new](https://vercel.com/new).
-2. Подключите GitHub и выберите ваш репозиторий.
-3. Vercel автоматически определит фреймворк как **Next.js** — менять ничего не нужно.
-
-### Шаг 3. Добавьте Environment Variables
-
-В разделе **Environment Variables** перед первым деплоем добавьте:
-
-| Имя переменной | Значение | Обязательно |
-|---|---|---|
-| `PUBG_API_KEY` | ваш ключ с [developer.pubg.com](https://developer.pubg.com/) | да |
-| `PUBG_USE_MOCKS` | `0` | нет (по умолчанию `0`) |
-| `PUBG_DEFAULT_SHARD` | `steam` | нет (по умолчанию `steam`) |
-
-### Шаг 4. Deploy
-
-Нажмите **Deploy**. Через 1–2 минуты получите ссылку вида `https://<project>.vercel.app`. Откройте `https://<project>.vercel.app/ru` — должна загрузиться главная страница.
+Подключи GitHub в Vercel project → Settings → Git → Connect Git Repository → выбрать `<your>/pubg-tracker`. После этого `git push` сам триггерит деплой, скрипт больше не нужен.
 
 ### Что важно знать про serverless
 
-- In‑process token bucket для rate‑limit работает в рамках **одного** инстанса Vercel. При высокой нагрузке несколько инстансов могут параллельно сделать больше 10 запросов в минуту суммарно. Для MVP это приемлемо.
-- Если в будущем нужен распределённый rate‑limit и более устойчивый кэш — можно подключить **Vercel KV / Upstash Redis / Cloudflare KV** как второй этап. В MVP это не требуется.
+- In‑process token bucket для rate‑limit к PUBG работает в рамках **одного** инстанса Vercel. При высокой нагрузке несколько инстансов могут параллельно превысить 10 RPM. Для MVP это приемлемо.
+- Для распределённого rate‑limit и устойчивого кэша между инстансами — можно подключить **Vercel KV / Upstash Redis**. В MVP не требуется.
+
+---
 
 ## Дисклеймер
 
-Этот проект не связан с KRAFTON, Inc. или PUBG STUDIOS. PUBG — зарегистрированный товарный знак KRAFTON, Inc. Все данные предоставлены публичным PUBG API.
+Этот проект не связан с KRAFTON, Inc. или PUBG STUDIOS. PUBG — зарегистрированный товарный знак KRAFTON, Inc. Все данные предоставлены публичным PUBG API и относятся к их владельцу.
 
 ---
 
 ## English version
 
-A web application for viewing PUBG: BATTLEGROUNDS player statistics, match history, leaderboards, and weapon mastery — built on the official public PUBG API.
+A web app for **PUBG: BATTLEGROUNDS** stats: profiles, match history, leaderboards, weapon mastery, **2D match replay**, death analysis, route maps, heatmaps. No ads, no signup, built on the official public PUBG API.
+
+**🟧 Live: [pubg-tracker-phi.vercel.app](https://pubg-tracker-phi.vercel.app)**
 
 ### Features
 
-- Search players across all platforms (Steam, PSN, Xbox, Kakao, Console, Stadia)
-- Lifetime + per-season stats across all game modes (Solo / Duo / Squad × TPP/FPP)
-- Derived metrics: K/D, win rate, top‑10 rate, average damage, average survival time, headshot %
-- Recent matches with full lobby roster and per-participant stats
-- Match details with telemetry-derived highlights (longest kill, top damage, top kills)
-- Weapon and survival mastery
-- Season leaderboards
-- Bilingual UI: **Russian (default) / English** — URL-based locale (`/ru/...`, `/en/...`)
-- Built-in mock mode — the app **runs without an API key** for development and demos
-
-### Tech stack
-
-Next.js 15 (App Router, RSC) · React 19 · TypeScript (strict) · Tailwind CSS 3 · next-intl · Zod
+- **Search & profile**: lifetime + per‑season stats, derived metrics (K/D, win rate, top‑10 rate, avg damage, HS%, avg survival), Recent Form (last‑5 aggregates + placement strip), Best Match teaser, weapon + survival mastery
+- **Compare**: side‑by‑side at `/en/compare?a=...&b=...`, with green highlight on winner of each metric
+- **Match deep‑dive**: kill tree, care package tracker, per‑player Death Analysis, Route Map, Weapon Breakdown, Damage Timeline (when navigating from your profile)
+- **2D Replay**: full match playback with rAF playback, x1/x2/x4/x8 speed, scrubber, focus‑player picker, blue/safe zone overlay, kill markers, kill/landing heatmaps
+- **Local favorites**: pin players, recently viewed, all stored in localStorage
+- **i18n**: Russian (default) / English
 
 ### Quick start
 
@@ -167,46 +165,29 @@ Next.js 15 (App Router, RSC) · React 19 · TypeScript (strict) · Tailwind CSS 
 node --version    # v20+ required
 npm install
 cp .env.example .env.local
-# Either leave PUBG_API_KEY empty for mock mode,
-# or paste your key from https://developer.pubg.com
+# Paste your PUBG API key from https://developer.pubg.com into PUBG_API_KEY=
 npm run dev
-# Open http://localhost:3000 (redirects to /ru by default; switch via /en)
+# Open http://localhost:3000
 ```
 
-### Available scripts
+### Tech stack
 
-| Command | Action |
-|---|---|
-| `npm run dev` | Start dev server |
-| `npm run build` | Production build |
-| `npm start` | Start production server |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run sync-assets` | Fetch icons + dictionaries from `pubg/api-assets` |
+Next.js 15 (App Router, RSC) · React 19 · TypeScript (strict) · Tailwind CSS 3 · next‑intl · Zod · Vitest
 
 ### Architecture
 
-- All requests to `api.pubg.com` go through the server proxy at `/api/pubg/[...path]`. The API key never reaches the client bundle.
-- Caching uses Next.js `fetch` with `revalidate` per resource type (matches: 30 days, profiles: 5 min, leaderboards: 10 min, seasons: 24 h).
-- An in-process token bucket guards against the PUBG API 10 RPM rate limit; HTTP 429 is converted into a user-friendly message with retry-after seconds.
-- Mock mode (`PUBG_USE_MOCKS=1` or empty key) serves fixtures from `src/lib/pubg/mocks/`.
-- The PUBG API only retains match data for 14 days, so the app shows what is currently exposed via the player's `relationships.matches`, not full history.
+All `api.pubg.com` calls go through `/api/pubg/[...path]`. The API key never reaches the client bundle. Origin‑check + per‑IP rate‑limit guard the proxy from being used as a free PUBG frontend on someone else's key. The 10 RPM PUBG limit is honored via an in‑process token bucket with an 8s per‑request timeout. Match details are cached 30 days, profiles 5 min, leaderboards 10 min. Telemetry is parsed permissively — unknown events are ignored. PUBG only retains match data for 14 days, so only what's exposed via `relationships.matches` is shown.
 
 ### Deploy to Vercel
 
+Repo is wired to Vercel auto‑deploy on push. First time:
+
 ```bash
-git init && git add . && git commit -m "init pubg tracker"
-git remote add origin https://github.com/<you>/<repo>.git
-git push -u origin main
-# Then on https://vercel.com/new:
-#   1. Import the GitHub repo
-#   2. Framework preset: Next.js (auto)
-#   3. Environment Variables → add PUBG_API_KEY (from https://developer.pubg.com)
-#   4. Deploy
-# Visit https://<project>.vercel.app/ru
+gh auth login --web && vercel login
+bash scripts/deploy.sh
 ```
 
-The in-process rate limiter works per serverless instance. For distributed rate-limit + persistent cache across instances, plug in Vercel KV / Upstash Redis as a second-stage upgrade — not required for MVP.
+The script creates the GitHub repo, pushes `main`, links to Vercel, sets `PUBG_API_KEY` as a production env var (the value never leaves your machine), and deploys to prod.
 
 ### Disclaimer
 
