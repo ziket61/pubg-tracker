@@ -35,17 +35,43 @@ if [ ! -x "$GH" ]; then
 fi
 
 # Locate vercel CLI. On Git Bash + Windows, npm globals live in AppData/Roaming/npm
-# but that's not on the bash PATH by default — fall back to the npm-known location.
+# but that's not on the bash PATH by default — fall back to the npm-known locations.
+# Use -f (not -x) because Git Bash doesn't always set the execute bit on .cmd files.
+NPM_PREFIX_BASH=""
+if command -v npm >/dev/null 2>&1; then
+  NPM_PREFIX_RAW=$(npm config get prefix 2>/dev/null | tr -d '\r')
+  if [ -n "$NPM_PREFIX_RAW" ]; then
+    # Convert C:\foo\bar -> /c/foo/bar for Git Bash.
+    NPM_PREFIX_BASH=$(echo "$NPM_PREFIX_RAW" | sed -E 's|^([A-Za-z]):|/\L\1|; s|\\|/|g')
+  fi
+fi
+
+CANDIDATES=(
+  "$NPM_PREFIX_BASH/vercel.cmd"
+  "$APPDATA/npm/vercel.cmd"
+  "/c/Users/$USERNAME/AppData/Roaming/npm/vercel.cmd"
+  "$HOME/AppData/Roaming/npm/vercel.cmd"
+  "$USERPROFILE/AppData/Roaming/npm/vercel.cmd"
+)
+
 if command -v vercel >/dev/null 2>&1; then
   VERCEL="vercel"
-elif [ -x "$APPDATA/npm/vercel.cmd" ]; then
-  VERCEL="$APPDATA/npm/vercel.cmd"
-elif [ -x "/c/Users/$USERNAME/AppData/Roaming/npm/vercel.cmd" ]; then
-  VERCEL="/c/Users/$USERNAME/AppData/Roaming/npm/vercel.cmd"
-elif [ -x "$HOME/AppData/Roaming/npm/vercel.cmd" ]; then
-  VERCEL="$HOME/AppData/Roaming/npm/vercel.cmd"
 else
-  echo "ERROR: vercel CLI not found. Install via: npm i -g vercel" >&2
+  for cand in "${CANDIDATES[@]}"; do
+    [ -z "$cand" ] && continue
+    if [ -f "$cand" ]; then
+      VERCEL="$cand"
+      break
+    fi
+  done
+fi
+
+if [ -z "$VERCEL" ]; then
+  echo "ERROR: vercel CLI not found. Tried:" >&2
+  for cand in "${CANDIDATES[@]}"; do
+    echo "  - $cand" >&2
+  done
+  echo "Install via: npm i -g vercel" >&2
   exit 1
 fi
 
