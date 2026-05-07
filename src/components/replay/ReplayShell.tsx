@@ -122,7 +122,9 @@ export function ReplayShell({
 
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(autoPlay);
-  const [speed, setSpeed] = useState(compact ? 8 : 1);
+  // Default playback speed = 5× per user feedback. Compact (auto-loop)
+  // mini-map keeps 8× because it's just a loop preview.
+  const [speed, setSpeed] = useState(compact ? 8 : 5);
   const [focusId, setFocusId] = useState<string | null>(defaultFocusId ?? null);
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
