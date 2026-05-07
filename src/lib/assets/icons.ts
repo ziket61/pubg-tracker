@@ -51,6 +51,19 @@ const ASSET_OVERRIDES: Record<string, string> = {
   Item_Weapon_Tommy_C: "Item_Weapon_Thompson_C",
   Item_Weapon_MicroUZI_C: "Item_Weapon_UZI_C",
   Item_Weapon_Win94_C: "Item_Weapon_Win1894_C",
+  Item_Weapon_S686_C: "Item_Weapon_Berreta686_C",
+  Item_Weapon_S12K_C: "Item_Weapon_OriginS12_C",
+  Item_Weapon_O12_C: "Item_Weapon_Saiga12_C",
+  Item_Weapon_Lynx_C: "Item_Weapon_L6_C",
+  // Lever-action shotguns / rare cases telemetry calls "DBS" or "Lever"
+  Item_Weapon_DBS_C: "Item_Weapon_Winchester_C",
+  Item_Weapon_LeverAction_C: "Item_Weapon_Win1894_C",
+  WeapDBS_C: "Item_Weapon_Winchester_C",
+  WeapLeverAction_C: "Item_Weapon_Win1894_C",
+  WeapLynx_C: "Item_Weapon_L6_C",
+  WeapL6_C: "Item_Weapon_L6_C",
+  WeapMortar_C: "Item_Weapon_Mortar_C",
+  WeapPanzerFaust100M_C: "Item_Weapon_PanzerFaust100M_C",
 };
 
 // Pistols + a handful of utility "handguns". Kept as an explicit set
@@ -80,6 +93,11 @@ const MELEE_IDS: ReadonlySet<string> = new Set([
 // Map telemetry damage causes that aren't weapons to the dedicated
 // killfeed icons in `Assets/Icons/Killfeed`. Keeps environmental damage
 // (zone, fall, drown, vehicle) out of the broken-image fallback.
+//
+// `PlayerFemale_*` / `PlayerMale_*` are the player avatar class names —
+// they appear as the damage causer when someone gets killed by an
+// unarmed punch / fist. Without this mapping the killfeed showed
+// raw "PlayerFemale_A" text. They map to the Punch glyph.
 const KILLFEED_ICONS: Record<string, string> = {
   BlueZone: "Bluezone",
   RedZone: "Redzone",
@@ -95,6 +113,12 @@ const KILLFEED_ICONS: Record<string, string> = {
   Melee_Throw: "Melee_Throw",
   Train: "Train",
   Ferry: "Ferry",
+  // Player avatar classes — unarmed melee. Telemetry uses these as the
+  // damageCauserName when no weapon is equipped.
+  PlayerFemale_A: "Punch",
+  PlayerFemale_B: "Punch",
+  PlayerMale_A: "Punch",
+  PlayerMale_B: "Punch",
 };
 
 /**

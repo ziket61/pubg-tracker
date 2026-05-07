@@ -122,7 +122,9 @@ export function ReplayShell({
 
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(autoPlay);
-  const [speed, setSpeed] = useState(compact ? 8 : 1);
+  // Default playback speed = 5× per user feedback. Compact (auto-loop)
+  // mini-map keeps 8× because it's just a loop preview.
+  const [speed, setSpeed] = useState(compact ? 8 : 5);
   const [focusId, setFocusId] = useState<string | null>(defaultFocusId ?? null);
   const [showTrails, setShowTrails] = useState(true);
   const [showZone, setShowZone] = useState(true);
@@ -133,9 +135,14 @@ export function ReplayShell({
   const [hoverId, setHoverId] = useState<string | null>(null);
   // Continuous zoom (1.0 .. 5.0) and pan offset (px, applied as translate).
   // Pan is reset whenever zoom drops back to 1×.
-  const [zoom, setZoom] = useState(1);
+  // When entering with a focus player (e.g. /replay?player=z1qt) start
+  // zoomed in 2× so the camera tracks them right away.
+  const [zoom, setZoom] = useState(defaultFocusId ? 2 : 1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [fullscreen, setFullscreen] = useState(false);
+  // Sidebar sort mode (#6 feedback). Default = team grouping.
+  type SortMode = "team" | "alpha" | "alive" | "kills";
+  const [sortMode, setSortMode] = useState<SortMode>("team");
 
   // Track when each player died so the sidebar can grey their row out.
   const deathByAccount = useMemo(() => {
@@ -324,8 +331,24 @@ export function ReplayShell({
       .reverse();
   }, [scene.kills, time]);
 
+  // Per-player kill counter — accumulates kills up to the current playback
+  // time so the sidebar can show "Name · 3K" (#8). Recomputed only when
+  // `time` or kills change.
+  const killsByAccount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const k of scene.kills) {
+      if (k.time > time) break;
+      const a = k.killer?.accountId;
+      if (!a) continue;
+      m.set(a, (m.get(a) ?? 0) + 1);
+    }
+    return m;
+  }, [scene.kills, time]);
+
   // Group players by team. Untrustworthy team ids (undefined) all go in the
   // "—" bucket. Sorted by team rank if we know it (closer to # 1 = higher).
+  // The base shape stays grouped — non-team sorts are applied at render
+  // time on a flattened list (see PlayerSidebar).
   const teamGroups = useMemo(() => {
     const groups = new Map<number, Array<{ id: string; p: PlayerRef }>>();
     for (const [id, p] of scene.players.entries()) {
@@ -925,8 +948,11 @@ export function ReplayShell({
           focusId={focusId}
           onFocus={setFocusId}
           isDead={isDead}
+          killsByAccount={killsByAccount}
           shard={shard}
           totalCount={scene.players.size}
+          sortMode={sortMode}
+          onSortMode={setSortMode}
           t={t}
           tc={tc}
         />
@@ -1347,13 +1373,18 @@ function Legend({ t }: { t: ReturnType<typeof useTranslations> }) {
   );
 }
 
+type SortMode = "team" | "alpha" | "alive" | "kills";
+
 function PlayerSidebar({
   teamGroups,
   focusId,
   onFocus,
   isDead,
+  killsByAccount,
   shard,
   totalCount,
+  sortMode,
+  onSortMode,
   t,
   tc,
 }: {
@@ -1361,15 +1392,96 @@ function PlayerSidebar({
   focusId: string | null;
   onFocus: (id: string | null) => void;
   isDead: (accountId: string) => boolean;
+  killsByAccount: Map<string, number>;
   shard: Shard;
   totalCount: number;
+  sortMode: SortMode;
+  onSortMode: (m: SortMode) => void;
   t: ReturnType<typeof useTranslations>;
   tc: ReturnType<typeof useTranslations>;
 }) {
+  // Build a flattened list for non-team sorts. Each row carries enough
+  // metadata to render exactly the same as the grouped view.
+  const flatRows = useMemo(() => {
+    const rows: Array<{ id: string; p: PlayerRef; teamId: number }> = [];
+    for (const { teamId, members } of teamGroups) {
+      for (const m of members) rows.push({ id: m.id, p: m.p, teamId });
+    }
+    if (sortMode === "alpha") {
+      rows.sort((a, b) => (a.p.name ?? "").localeCompare(b.p.name ?? ""));
+    } else if (sortMode === "alive") {
+      rows.sort((a, b) => Number(isDead(a.id)) - Number(isDead(b.id)));
+    } else if (sortMode === "kills") {
+      rows.sort(
+        (a, b) =>
+          (killsByAccount.get(b.id) ?? 0) - (killsByAccount.get(a.id) ?? 0),
+      );
+    }
+    return rows;
+  }, [teamGroups, sortMode, isDead, killsByAccount]);
+
+  const renderRow = (row: { id: string; p: PlayerRef; teamId: number }) => {
+    const { id, p } = row;
+    const dead = isDead(id);
+    const memberColor = teamColor(p.teamId);
+    const kills = killsByAccount.get(id) ?? 0;
+    return (
+      <div
+        key={id}
+        className={`group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
+          focusId === id ? "bg-bg-muted text-fg" : "hover:bg-bg-muted"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => onFocus(id)}
+          className={`flex flex-1 items-center gap-2 truncate text-left ${
+            dead ? "text-fg-subtle line-through decoration-fg-subtle/40" : "text-fg-muted hover:text-fg"
+          }`}
+          aria-label={`focus ${p.name}`}
+        >
+          <span
+            className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+            style={{
+              backgroundColor: dead ? "#3a3f55" : memberColor,
+              opacity: dead ? 0.6 : 1,
+            }}
+          />
+          <span className="truncate">{p.name}</span>
+          {kills > 0 && (
+            <span className="ml-auto rounded bg-success/15 px-1 font-mono text-[9px] tabular-nums text-success">
+              {kills}K
+            </span>
+          )}
+        </button>
+        <PlayerLink
+          name={p.name}
+          shard={shard}
+          className="text-fg-subtle hover:text-brand text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
+          fallback="↗"
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-border bg-surface p-3">
-      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-subtle">
-        {t("focusPlayer")}
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-subtle">
+          {t("focusPlayer")}
+        </span>
+        {/* Sort dropdown — switches between team grouping and flat sorts. */}
+        <select
+          value={sortMode}
+          onChange={(e) => onSortMode(e.target.value as SortMode)}
+          className="rounded border border-border bg-bg-muted px-1.5 py-0.5 font-mono text-[10px] text-fg-muted hover:text-fg"
+          aria-label={t("sortLabel")}
+        >
+          <option value="team">{t("sortTeam")}</option>
+          <option value="alpha">{t("sortAlpha")}</option>
+          <option value="alive">{t("sortAlive")}</option>
+          <option value="kills">{t("sortKills")}</option>
+        </select>
       </div>
       <div className="mt-2 max-h-[480px] overflow-y-auto pr-1">
         <button
@@ -1381,59 +1493,28 @@ function PlayerSidebar({
         >
           — {t("none")} —
         </button>
-        {teamGroups.map(({ teamId, members }) => {
-          const color = teamColor(teamId === -1 ? undefined : teamId);
-          const aliveCount = members.filter((m) => !isDead(m.id)).length;
-          return (
-            <div key={teamId} className="mt-2 first:mt-0">
-              <div className="flex items-center justify-between border-b border-border/50 px-2 pb-1">
-                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-                  {teamId === -1 ? "—" : `T${teamId}`}
-                </span>
-                <span className="font-mono text-[9px] text-fg-subtle">
-                  {aliveCount}/{members.length}
-                </span>
+        {sortMode === "team" ? (
+          teamGroups.map(({ teamId, members }) => {
+            const color = teamColor(teamId === -1 ? undefined : teamId);
+            const aliveCount = members.filter((m) => !isDead(m.id)).length;
+            return (
+              <div key={teamId} className="mt-2 first:mt-0">
+                <div className="flex items-center justify-between border-b border-border/50 px-2 pb-1">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                    {teamId === -1 ? "—" : `T${teamId}`}
+                  </span>
+                  <span className="font-mono text-[9px] text-fg-subtle">
+                    {aliveCount}/{members.length}
+                  </span>
+                </div>
+                {members.map((m) => renderRow({ id: m.id, p: m.p, teamId }))}
               </div>
-              {members.map(({ id, p }) => {
-                const dead = isDead(id);
-                const memberColor = teamColor(p.teamId);
-                return (
-                  <div
-                    key={id}
-                    className={`group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
-                      focusId === id ? "bg-bg-muted text-fg" : "hover:bg-bg-muted"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onFocus(id)}
-                      className={`flex flex-1 items-center gap-2 truncate text-left ${
-                        dead ? "text-fg-subtle line-through decoration-fg-subtle/40" : "text-fg-muted hover:text-fg"
-                      }`}
-                      aria-label={`focus ${p.name}`}
-                    >
-                      <span
-                        className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-                        style={{
-                          backgroundColor: dead ? "#3a3f55" : memberColor,
-                          opacity: dead ? 0.6 : 1,
-                        }}
-                      />
-                      <span className="truncate">{p.name}</span>
-                    </button>
-                    <PlayerLink
-                      name={p.name}
-                      shard={shard}
-                      className="text-fg-subtle hover:text-brand text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
-                      fallback="↗"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
+            );
+          })
+        ) : (
+          <div>{flatRows.map(renderRow)}</div>
+        )}
       </div>
       <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
         {totalCount} {tc("players")}
@@ -1478,13 +1559,15 @@ function KillfeedHistory({
 }
 
 function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; tone: "play" | "blue" | "red" }) {
-  // play = current play zone outline drawn WHITE (the white circle from the
-  //        in-game minimap — where players are safe right now). Tint INSIDE.
-  // blue = the next-zone target drawn BLUE. The blue zone (gas) lives
-  //        OUTSIDE the circle, so we use an inverse-fill path (rect minus
-  //        circle, even-odd rule) to tint the area BEYOND the boundary.
+  // play = current play zone, drawn WHITE — outline only (#3 feedback:
+  //        no inner tint, the white inside was visually noisy).
+  // blue = next-zone target drawn BLUE. Gas covers the area OUTSIDE the
+  //        circle, so we use an inverse-fill path (rect minus circle).
   // red  = bombardment zone — dashed, tint INSIDE.
-  // Strokes were 1.4–1.5 px; per user feedback round-4 trim to 1 px (≈ −1/3).
+  // `vector-effect="non-scaling-stroke"` keeps the line width stable at
+  // every zoom level (#5 feedback: lines used to fatten on zoom-in).
+  // Stroke trimmed from 1 px to 0.7 px (~30% thinner).
+  const STROKE_WIDTH = 0.7;
   if (tone === "blue") {
     return (
       <g>
@@ -1495,25 +1578,30 @@ function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; to
           fillRule="evenodd"
           pointerEvents="none"
         />
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#38bdf8" strokeWidth="1" opacity="0.85" />
+        <circle
+          cx={cx} cy={cy} r={r}
+          fill="none" stroke="#38bdf8"
+          strokeWidth={STROKE_WIDTH}
+          vectorEffect="non-scaling-stroke"
+          opacity="0.85"
+        />
       </g>
     );
   }
   const stroke = tone === "play" ? "#ffffff" : "#ef4444";
-  const fillOpacity = tone === "play" ? 0.06 : 0.08;
   return (
     <g>
       <circle
-        cx={cx}
-        cy={cy}
-        r={r}
+        cx={cx} cy={cy} r={r}
         fill="none"
         stroke={stroke}
-        strokeWidth={1}
+        strokeWidth={STROKE_WIDTH}
+        vectorEffect="non-scaling-stroke"
         strokeDasharray={tone === "red" ? "4 3" : undefined}
         opacity={tone === "play" ? 0.95 : 0.85}
       />
-      <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={fillOpacity} />
+      {/* play tone has NO fill — outline only (#3). red still tints inside. */}
+      {tone === "red" && <circle cx={cx} cy={cy} r={r} fill={stroke} opacity={0.08} />}
     </g>
   );
 }
