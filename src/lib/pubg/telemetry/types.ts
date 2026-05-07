@@ -78,6 +78,18 @@ export interface VehicleEvent {
   location: Vec3;
 }
 
+/**
+ * Per-player vehicle ride state transitions. Lets the replay overlay
+ * draw a steering-wheel glyph instead of a circle while a player is
+ * inside a vehicle.
+ */
+export interface VehicleRideEvent {
+  time: number;
+  accountId: string;
+  action: "enter" | "leave";
+  vehicleType: string;
+}
+
 export interface ParachuteLandingEvent {
   time: number;
   accountId: string;
@@ -109,6 +121,8 @@ export interface TelemetryScene {
   parachuteLandings?: ParachuteLandingEvent[];
   /** First-seen locations for special vehicles (BRDM-2). Optional — not all matches have them. */
   vehicleSpawns?: VehicleEvent[];
+  /** Per-player vehicle ride enter/leave events. Optional. */
+  vehicleRides?: VehicleRideEvent[];
   zones: ZoneSample[];
   players: Map<string, PlayerRef>;
 }

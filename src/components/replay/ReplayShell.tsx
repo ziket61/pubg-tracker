@@ -10,6 +10,7 @@ import type {
   PlayerRef,
   TelemetryScene,
   VehicleEvent,
+  VehicleRideEvent,
 } from "@/lib/pubg/telemetry/types";
 import { snapshotAt, trailFor, zoneAt } from "@/lib/pubg/telemetry/timeline";
 import { gameToCanvas, radiusToCanvas } from "@/lib/pubg/telemetry/coordinates";
@@ -61,6 +62,7 @@ export interface SerializableScene {
   carePackages: TelemetryScene["carePackages"];
   parachuteLandings?: ParachuteLandingEvent[];
   vehicleSpawns?: VehicleEvent[];
+  vehicleRides?: VehicleRideEvent[];
   /**
    * Subset of damage events with attacker + victim locations attached, for
    * the tracer animation. Filtered to damage >= 5 to skip noise.
@@ -114,6 +116,7 @@ export function ReplayShell({
       carePackages: serialized.carePackages,
       parachuteLandings: serialized.parachuteLandings ?? [],
       vehicleSpawns: serialized.vehicleSpawns ?? [],
+      vehicleRides: serialized.vehicleRides ?? [],
       zones: serialized.zones,
       players: new Map(serialized.playerEntries),
     }),
@@ -281,6 +284,21 @@ export function ReplayShell({
   const visibleVehicles = useMemo<VehicleEvent[]>(() => {
     return (scene.vehicleSpawns ?? []).filter((v) => v.time <= time + 0.001);
   }, [scene.vehicleSpawns, time]);
+
+  // Per-account "currently riding" map at the current playback time.
+  // Built by replaying enter/leave events up to `time`. The value is the
+  // vehicle type so the marker could later differentiate (motorcycle vs
+  // BRDM vs car); for now we just need "riding or not".
+  const ridingByAccount = useMemo<Map<string, string>>(() => {
+    const m = new Map<string, string>();
+    const rides = scene.vehicleRides ?? [];
+    for (const r of rides) {
+      if (r.time > time) break;
+      if (r.action === "enter") m.set(r.accountId, r.vehicleType);
+      else m.delete(r.accountId);
+    }
+    return m;
+  }, [scene.vehicleRides, time]);
 
   // Focus player's own events for the scrubber timeline markers — now with
   // full event payload so we can show rich tooltips on hover.
@@ -537,24 +555,20 @@ export function ReplayShell({
               );
             })}
 
-          {/* BRDM markers — flare-called armored vehicles. Rendered as a
-              small blocky vehicle silhouette with a subtle blue tint so it
-              reads differently from drops/kills. */}
+          {/* BRDM markers — flare-called armored vehicles. Rendered with
+              the real vehicle sprite (BP_BRDM_C.png from pubg/api-assets)
+              over a dark backing disk for legibility against the map. */}
           {visibleVehicles.map((v) => {
             const p = gameToCanvas(v.location, map, { width: CANVAS_SIZE, height: CANVAS_SIZE });
             return (
               <g key={`veh-${v.vehicleId}`} transform={`translate(${p.x} ${p.y})`}>
-                <circle r="9" fill="rgba(8,9,12,0.7)" stroke="#38bdf8" strokeWidth="1.4" />
-                <text
-                  fontFamily="var(--font-mono)"
-                  fontSize="6"
-                  fill="#38bdf8"
-                  textAnchor="middle"
-                  y="2"
-                  style={{ paintOrder: "stroke", stroke: "rgba(8,9,12,0.9)", strokeWidth: 2 } as React.CSSProperties}
-                >
-                  BRDM
-                </text>
+                <circle r="9" fill="rgba(8,9,12,0.85)" stroke="#38bdf8" strokeWidth="1.2" />
+                <image
+                  href="https://raw.githubusercontent.com/pubg/api-assets/master/Assets/Vehicle/BP_BRDM_C.png"
+                  x="-7" y="-7"
+                  width="14" height="14"
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
             );
           })}
@@ -700,6 +714,8 @@ export function ReplayShell({
             const color = teamColor(s.teamId);
             const dead = s.health <= 0;
             const alpha = s.isStale ? 0.35 : 1;
+            const riding = ridingByAccount.has(s.accountId);
+            const r = isFocus || isHover ? 5.5 : 4;
             return (
               <g key={s.accountId} opacity={alpha}>
                 {/* Drop shadow under live dot — adds 3D depth on flat 2D map */}
@@ -707,25 +723,41 @@ export function ReplayShell({
                   <ellipse
                     cx={c.x}
                     cy={c.y + 2.5}
-                    rx={isFocus ? 5 : 3.5}
+                    rx={r * 0.85}
                     ry={2}
                     fill="rgba(8,9,12,0.7)"
                   />
                 )}
                 {(isFocus || isHover) && (
-                  <circle cx={c.x} cy={c.y} r="9" fill="none" stroke={color} strokeWidth="1" opacity="0.5" />
+                  <circle cx={c.x} cy={c.y} r={r + 4} fill="none" stroke={color} strokeWidth="1" opacity="0.5" />
                 )}
-                <circle
-                  cx={c.x}
-                  cy={c.y}
-                  r={isFocus || isHover ? 5 : 3.5}
-                  fill={dead ? "#3a3f55" : color}
-                  stroke="rgba(8,9,12,0.95)"
-                  strokeWidth="1.25"
-                  onMouseEnter={() => !compact && setHoverId(s.accountId)}
-                  onMouseLeave={() => !compact && setHoverId(null)}
-                  style={{ cursor: compact ? "inherit" : "pointer" }}
-                />
+                {dead || !riding ? (
+                  <circle
+                    cx={c.x}
+                    cy={c.y}
+                    r={r}
+                    fill={dead ? "#3a3f55" : color}
+                    stroke="rgba(8,9,12,0.95)"
+                    strokeWidth="1.25"
+                    onMouseEnter={() => !compact && setHoverId(s.accountId)}
+                    onMouseLeave={() => !compact && setHoverId(null)}
+                    style={{ cursor: compact ? "inherit" : "pointer" }}
+                  />
+                ) : (
+                  // Steering-wheel glyph for riding players. Center hub + 3
+                  // spokes inside an outer ring — reads as "in vehicle" at a
+                  // glance even at 1× zoom.
+                  <g
+                    onMouseEnter={() => !compact && setHoverId(s.accountId)}
+                    onMouseLeave={() => !compact && setHoverId(null)}
+                    style={{ cursor: compact ? "inherit" : "pointer" }}
+                  >
+                    <circle cx={c.x} cy={c.y} r={r + 0.5} fill={color} stroke="rgba(8,9,12,0.95)" strokeWidth="1.25" />
+                    <circle cx={c.x} cy={c.y} r={r * 0.45} fill="rgba(8,9,12,0.95)" />
+                    <line x1={c.x - r} y1={c.y} x2={c.x + r} y2={c.y} stroke="rgba(8,9,12,0.95)" strokeWidth="1.1" />
+                    <line x1={c.x} y1={c.y} x2={c.x} y2={c.y + r * 0.85} stroke="rgba(8,9,12,0.95)" strokeWidth="1.1" />
+                  </g>
+                )}
                 {(isFocus || isHover) && (
                   <text
                     x={c.x + 8}
@@ -1569,23 +1601,17 @@ function ZoneCircle({ cx, cy, r, tone }: { cx: number; cy: number; r: number; to
   // Stroke trimmed from 1 px to 0.7 px (~30% thinner).
   const STROKE_WIDTH = 0.7;
   if (tone === "blue") {
+    // Per round-6 feedback: drop the BLUE outline ring entirely (rudiment
+    // — duplicates info already conveyed by the gas tint). Keep ONLY the
+    // inverse-fill path so the area outside the boundary reads as gas.
     return (
-      <g>
-        <path
-          d={`M 0,0 L ${CANVAS_SIZE},0 L ${CANVAS_SIZE},${CANVAS_SIZE} L 0,${CANVAS_SIZE} Z M ${cx + r},${cy} A ${r},${r} 0 1,0 ${cx - r},${cy} A ${r},${r} 0 1,0 ${cx + r},${cy} Z`}
-          fill="#38bdf8"
-          opacity="0.10"
-          fillRule="evenodd"
-          pointerEvents="none"
-        />
-        <circle
-          cx={cx} cy={cy} r={r}
-          fill="none" stroke="#38bdf8"
-          strokeWidth={STROKE_WIDTH}
-          vectorEffect="non-scaling-stroke"
-          opacity="0.85"
-        />
-      </g>
+      <path
+        d={`M 0,0 L ${CANVAS_SIZE},0 L ${CANVAS_SIZE},${CANVAS_SIZE} L 0,${CANVAS_SIZE} Z M ${cx + r},${cy} A ${r},${r} 0 1,0 ${cx - r},${cy} A ${r},${r} 0 1,0 ${cx + r},${cy} Z`}
+        fill="#38bdf8"
+        opacity="0.10"
+        fillRule="evenodd"
+        pointerEvents="none"
+      />
     );
   }
   const stroke = tone === "play" ? "#ffffff" : "#ef4444";

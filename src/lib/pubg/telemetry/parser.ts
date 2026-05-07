@@ -12,6 +12,7 @@ import type {
   TelemetryScene,
   Vec3,
   VehicleEvent,
+  VehicleRideEvent,
   ZoneSample,
 } from "./types";
 
@@ -100,6 +101,9 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   // Vehicle dedup: telemetry emits one event per ride/leave per vehicle
   // instance — we want one marker per BRDM, at its earliest known position.
   const seenVehicles = new Map<string, VehicleEvent>();
+  // Per-player ride state transitions. Used by the replay overlay to
+  // swap the player marker for a steering-wheel glyph while in vehicle.
+  const vehicleRides: VehicleRideEvent[] = [];
 
   const seenPlayer = (p: PlayerRef | null) => {
     if (!p) return;
@@ -271,15 +275,28 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
       }
       case "LogVehicleLeave":
       case "LogVehicleRide": {
-        // BRDM-2 markers — the user wants to know where flare-called BRDMs land.
         const ev = e as RawTelemetryEvent & {
           vehicle?: { vehicleType?: string; vehicleId?: string; location?: { x?: number; y?: number; z?: number } };
+          character?: RawCharacter;
         };
         const v = ev.vehicle;
-        if (!v?.vehicleType || !v.location) continue;
-        // Only track BRDM and similar special vehicles. Skip cars/bikes —
-        // they'd flood the map.
-        if (!/BRDM|Coupe_RB|MotorGlider|Pillar/i.test(v.vehicleType)) continue;
+        const c = ev.character;
+        if (!v?.vehicleType) continue;
+
+        // Per-player ride transition (any vehicle — used to swap the
+        // player marker for a steering-wheel glyph).
+        if (c?.accountId) {
+          vehicleRides.push({
+            time: tOf(e),
+            accountId: c.accountId,
+            action: e._T === "LogVehicleRide" ? "enter" : "leave",
+            vehicleType: v.vehicleType,
+          });
+        }
+
+        // BRDM marker: only track BRDM-2 and similar special drops; skip
+        // regular cars/bikes because they'd flood the map.
+        if (!v.location || !/BRDM|Coupe_RB|MotorGlider|Pillar/i.test(v.vehicleType)) continue;
         const id = v.vehicleId ?? `${v.vehicleType}-${Math.round(v.location.x ?? 0)}-${Math.round(v.location.y ?? 0)}`;
         if (seenVehicles.has(id)) continue;
         seenVehicles.set(id, {
@@ -337,6 +354,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
   const vehicleSpawns = Array.from(seenVehicles.values()).sort(
     (a, b) => a.time - b.time,
   );
+  vehicleRides.sort((a, b) => a.time - b.time);
 
   return {
     matchStartTime,
@@ -350,6 +368,7 @@ export function parseTelemetry(raw: unknown[], mapNameHint?: string): TelemetryS
     carePackages,
     parachuteLandings,
     vehicleSpawns,
+    vehicleRides,
     zones,
     players,
   };

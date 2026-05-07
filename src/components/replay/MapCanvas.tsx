@@ -88,9 +88,10 @@ export function MapCanvas({
         </svg>
       </div>
 
-      {/* Map name overlay */}
+      {/* Map name overlay — size is already conveyed by the km axis labels,
+          so we drop the redundant "8×8KM" suffix. */}
       <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg/80 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-brand backdrop-blur-sm">
-        {map.displayName} · {map.sizeKm}×{map.sizeKm}km
+        {map.displayName}
       </div>
     </div>
   );

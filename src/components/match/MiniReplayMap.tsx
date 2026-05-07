@@ -68,6 +68,7 @@ export async function MiniReplayMap({
     carePackages: scene.carePackages,
     parachuteLandings: scene.parachuteLandings,
     vehicleSpawns: scene.vehicleSpawns,
+    vehicleRides: scene.vehicleRides,
     damageHits: [],
     playerEntries: Array.from(scene.players.entries()),
   };
