@@ -92,6 +92,7 @@ export default async function ReplayPage({
     carePackages: scene.carePackages,
     parachuteLandings: scene.parachuteLandings,
     vehicleSpawns: scene.vehicleSpawns,
+    vehicleRides: scene.vehicleRides,
     damageHits,
     playerEntries: Array.from(scene.players.entries()),
   };
@@ -106,7 +107,7 @@ export default async function ReplayPage({
         </h1>
       </div>
 
-      <ReplayShell scene={serialized} map={map} shard={shard} defaultFocusId={focusId} />
+      <ReplayShell scene={serialized} map={map} shard={shard} defaultFocusId={focusId} autoPlay />
     </div>
   );
 }

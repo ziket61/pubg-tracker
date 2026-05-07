@@ -67,6 +67,27 @@ const WEAPON_NAMES: Record<string, string> = {
   Item_Weapon_Mortar_C: "Mortar",
   Item_Weapon_PanzerFaust100M_C: "Panzerfaust",
   Item_Weapon_FlareGun_C: "Flare Gun",
+  // Player avatar classes — telemetry uses these as the damageCauserName
+  // for unarmed melee (no weapon equipped). The asset side maps them to
+  // the Punch killfeed glyph; the text side should also read "Punch"
+  // rather than the raw class name.
+  PlayerFemale_A: "Punch",
+  PlayerFemale_B: "Punch",
+  PlayerMale_A: "Punch",
+  PlayerMale_B: "Punch",
+  // Common environmental damage causes — friendly text instead of raw ids.
+  BlueZone: "Blue zone",
+  RedZone: "Red zone",
+  Bluezonegrenade_C: "Blue zone",
+  Damage_Explosion_BlackZone_C: "Black zone",
+  Falling: "Fall",
+  Drown: "Drown",
+  VehicleHit: "Vehicle",
+  VehicleDamage: "Vehicle",
+  ProjVehicle_C: "Vehicle",
+  Buff_DecreaseBreathInApnea_C: "Drown",
+  Train: "Train",
+  Ferry: "Ferry",
 };
 
 const MAP_NAMES: Record<string, string> = {
