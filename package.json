@@ -14,7 +14,7 @@
     "sync-assets": "tsx scripts/sync-assets.ts"
   },
   "dependencies": {
-    "next": "^15.1.0",
+    "next": "^15.5.18",
     "next-intl": "^3.26.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
